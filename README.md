@@ -1,1 +1,1 @@
-Expert Advisor Documentation.
+Documentation goes here.
