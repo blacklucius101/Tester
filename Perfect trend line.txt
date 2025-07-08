@@ -1,13 +1,13 @@
 //------------------------------------------------------------------
 #property copyright   "© mladen, 2019"
 #property link        "mladenfx@gmail.com"
-#property description "Perfect trend line with alerts"
+#property description "Perfect trend line with selectable bar/candle style"
 //------------------------------------------------------------------
 #property indicator_chart_window
 #property indicator_buffers 9
 #property indicator_plots   4
-#property indicator_label1  "PTL trend candles"
-#property indicator_type1   DRAW_COLOR_CANDLES
+#property indicator_label1  "PTL trend plot" // Changed label to be more generic
+#property indicator_type1   DRAW_COLOR_CANDLES // Default, will be changed in OnInit
 #property indicator_color1  clrDodgerBlue,clrCrimson
 #property indicator_label2  "PTL slow line"
 #property indicator_type2   DRAW_LINE
@@ -26,9 +26,16 @@
 input int inpFastLength = 3; // Fast length
 input int inpSlowLength = 7; // Slow length
 
-// New alert inputs:
-input bool EnableAlert = true;      // Enable alerting (sound and pop-up)
-input bool AlertOnClose = true;     // true = alert on candle close; false = immediate alert
+//---- Chart style enum
+enum enChartStyle
+{
+   STYLE_COLOR_BARS,    // DRAW_COLOR_BARS
+   STYLE_COLOR_CANDLES  // DRAW_COLOR_CANDLES
+};
+
+//---- Chart style selection
+input group           "Chart Style"
+input enChartStyle    inpChartStyle   = STYLE_COLOR_CANDLES; // Price visualization style
 
 // Indicator buffers
 double slowlu[], slowln[], fastln[], arrowar[], arrowcl[], candleo[], candleh[], candlel[], candlec[], candleC[];
@@ -49,6 +56,17 @@ int OnInit()
 
    _fastPeriod = MathMax(MathMin(inpFastLength, inpSlowLength), 1);
    _slowPeriod = MathMax(MathMax(inpFastLength, inpSlowLength), 1);
+
+   //--- Set drawing style for the main plot (index 0) based on user selection
+   if(inpChartStyle == STYLE_COLOR_CANDLES)
+   {
+      PlotIndexSetInteger(0, PLOT_DRAW_TYPE, DRAW_COLOR_CANDLES);
+      // indicator_type1 is already DRAW_COLOR_CANDLES by default in properties
+   }
+   else // STYLE_COLOR_BARS
+   {
+      PlotIndexSetInteger(0, PLOT_DRAW_TYPE, DRAW_COLOR_BARS);
+   }
 
    PlotIndexSetInteger(3, PLOT_ARROW, 159);
 
@@ -87,9 +105,6 @@ int OnCalculate(const int rates_total,
    static int m_arraySize = -1;
    if(m_arraySize < rates_total)
       m_arraySize = ArrayResize(m_array, rates_total + 500, 2000);
-
-   // Static variable to prevent multiple alerts for the same trend change
-   static int lastAlertedBar = -1;
 
    int i = prev_calculated - 1;
    if(i < 0)
@@ -153,22 +168,6 @@ int OnCalculate(const int rates_total,
       
       candleC[i] = m_array[i].trend;
       arrowcl[i] = m_array[i].trena;
-
-      // --- Alert logic: check for a change in the trend (candle color) ---
-      if(i > 0 && m_array[i].trend != m_array[i-1].trend)
-      {
-         // Determine the target index:
-         // If AlertOnClose is true, use the last fully closed bar (rates_total - 2),
-         // otherwise use the current (updating) candle (rates_total - 1).
-         int targetIndex = AlertOnClose ? (rates_total - 2) : (rates_total - 1);
-         if(i == targetIndex && i != lastAlertedBar && EnableAlert)
-         {
-            string msg = "Trend candle changed color at bar " + IntegerToString(i);
-            Alert(msg);
-            PlaySound("alert.wav");
-            lastAlertedBar = i;
-         }
-      }
    }
    return(rates_total);
 }
