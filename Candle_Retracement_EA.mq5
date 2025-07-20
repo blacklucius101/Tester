@@ -56,6 +56,8 @@ void DeleteIndicatorObjects()
    ObjectDelete(0, "BuyButton");
    ObjectDelete(0, "SellButton");
    ObjectDelete(0, "PendingStatusBox");
+   ObjectDelete(0, "TakeProfitBuy");
+   ObjectDelete(0, "TakeProfitSell");
   }
 
 //+------------------------------------------------------------------+
@@ -246,6 +248,12 @@ void TrailingStopModifyOrders()
 void OnTick()
 {
     TrailingStopModifyOrders();
+
+    // Draw Take Profit Lines
+    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    DrawTakeProfitLines(ask, bid);
+
     static int last_alert_signal = -99;
     static color last_box_color = clrNONE;
     color box_color = InpBoxColor;
@@ -631,5 +639,93 @@ void DrawRetracementLines(int identified_candle_index, double identified_high, d
         ObjectMove(0, low_line_name, 1, end_time, low_level);
     }
     ObjectSetInteger(0, low_line_name, OBJPROP_COLOR, clrAqua);
+}
+//+------------------------------------------------------------------+
+//| Draw Take Profit Lines                                           |
+//+------------------------------------------------------------------+
+void DrawTakeProfitLines(double ask, double bid)
+{
+    if (InpTakeProfit <= 0)
+    {
+        ObjectDelete(0, "TakeProfitBuy");
+        ObjectDelete(0, "TakeProfitSell");
+        ObjectDelete(0, "AskLine");
+        return;
+    }
+
+    // Calculate Take Profit levels
+    double tp_buy_level = ask + InpTakeProfit * _Point;
+    double tp_sell_level = bid - InpTakeProfit * _Point;
+
+    // Line names
+    string buy_line_name = "TakeProfitBuy";
+    string sell_line_name = "TakeProfitSell";
+    string ask_line_name = "AskLine";
+
+    // Get start time at current bar (shift 0)
+    datetime start_time = iTime(_Symbol, _Period, 0);
+
+    // TP lines: Get end time 3 bars ahead
+    int bars_total = Bars(_Symbol, _Period);
+    datetime end_time_tp;
+    if (bars_total >= 4)
+        end_time_tp = iTime(_Symbol, _Period, 0) + (iTime(_Symbol, _Period, 0) - iTime(_Symbol, _Period, 1)) * 3;
+    else
+        end_time_tp = TimeCurrent() + 3 * PeriodSeconds();  // fallback
+
+    // Ask line: Shorter span (e.g., 1 bar ahead)
+    datetime end_time_ask;
+    if (bars_total >= 2)
+        end_time_ask = iTime(_Symbol, _Period, 0) + (iTime(_Symbol, _Period, 0) - iTime(_Symbol, _Period, 1));
+    else
+        end_time_ask = TimeCurrent() + PeriodSeconds();  // fallback
+
+    // Draw Buy TP Line
+    if (ObjectFind(0, buy_line_name) < 0)
+    {
+        ObjectCreate(0, buy_line_name, OBJ_TREND, 0, start_time, tp_buy_level, end_time_tp, tp_buy_level);
+        ObjectSetInteger(0, buy_line_name, OBJPROP_WIDTH, 1);
+        ObjectSetInteger(0, buy_line_name, OBJPROP_STYLE, STYLE_DOT);
+        ObjectSetInteger(0, buy_line_name, OBJPROP_RAY_RIGHT, false);
+        ObjectSetInteger(0, buy_line_name, OBJPROP_SELECTABLE, false);
+    }
+    else
+    {
+        ObjectMove(0, buy_line_name, 0, start_time, tp_buy_level);
+        ObjectMove(0, buy_line_name, 1, end_time_tp, tp_buy_level);
+    }
+    ObjectSetInteger(0, buy_line_name, OBJPROP_COLOR, clrGreen);
+
+    // Draw Sell TP Line
+    if (ObjectFind(0, sell_line_name) < 0)
+    {
+        ObjectCreate(0, sell_line_name, OBJ_TREND, 0, start_time, tp_sell_level, end_time_tp, tp_sell_level);
+        ObjectSetInteger(0, sell_line_name, OBJPROP_WIDTH, 1);
+        ObjectSetInteger(0, sell_line_name, OBJPROP_STYLE, STYLE_DOT);
+        ObjectSetInteger(0, sell_line_name, OBJPROP_RAY_RIGHT, false);
+        ObjectSetInteger(0, sell_line_name, OBJPROP_SELECTABLE, false);
+    }
+    else
+    {
+        ObjectMove(0, sell_line_name, 0, start_time, tp_sell_level);
+        ObjectMove(0, sell_line_name, 1, end_time_tp, tp_sell_level);
+    }
+    ObjectSetInteger(0, sell_line_name, OBJPROP_COLOR, clrRed);
+
+    // Draw Ask Line (shorter length)
+    if (ObjectFind(0, ask_line_name) < 0)
+    {
+        ObjectCreate(0, ask_line_name, OBJ_TREND, 0, start_time, ask, end_time_ask, ask);
+        ObjectSetInteger(0, ask_line_name, OBJPROP_WIDTH, 1);
+        ObjectSetInteger(0, ask_line_name, OBJPROP_STYLE, STYLE_SOLID);
+        ObjectSetInteger(0, ask_line_name, OBJPROP_RAY_RIGHT, false);
+        ObjectSetInteger(0, ask_line_name, OBJPROP_SELECTABLE, false);
+    }
+    else
+    {
+        ObjectMove(0, ask_line_name, 0, start_time, ask);
+        ObjectMove(0, ask_line_name, 1, end_time_ask, ask);
+    }
+    ObjectSetInteger(0, ask_line_name, OBJPROP_COLOR, clrBlue);
 }
 //+------------------------------------------------------------------+
