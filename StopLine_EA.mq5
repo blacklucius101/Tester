@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                                       VAR_EA.mq5 |
+//|                                                  StopLine_EA.mq5 |
 //|                        Copyright 2023, MetaQuotes Software Corp. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
@@ -12,7 +12,7 @@
 //--- Input parameters for trade levels
 input group "Trade Levels (in Points)"
 input int InpTakeProfit = 10600;       // Take Profit in points
-input int InpStopLoss = 70000;        // Stop Loss in points
+input int InpStopLoss = 50000;        // Stop Loss in points
 input int InpTrailingStop = 0;        // Trailing Stop in points (0 = disabled)
 input int InpTrailingStep = 1;        // Trailing Step in points
 input int InpStartTrailingPoint = 5001; // Start Trailing Point in points
@@ -20,6 +20,20 @@ input int InpStartTrailingPoint = 5001; // Start Trailing Point in points
 //--- Input parameter for lot size
 input group "Lot Size Management"
 input double InpLotSize = 0.0;        // Lot size (0.0 = dynamic calculation)
+
+//--- Pending Order State
+enum ENUM_PENDING_ORDER_TYPE
+  {
+   NONE,
+   BUY,
+   SELL
+  };
+
+ENUM_PENDING_ORDER_TYPE pendingOrderType = NONE;
+
+//--- Object Names
+#define HLINE_NAME "StopLine"
+#define STATUS_BOX_NAME "StatusBox"
 
 CTrade trade;
 
@@ -30,6 +44,8 @@ void DeleteIndicatorObjects()
   {
    ObjectDelete(0, "BuyButton");
    ObjectDelete(0, "SellButton");
+   ObjectDelete(0, HLINE_NAME);
+   ObjectDelete(0, STATUS_BOX_NAME);
   }
 
 //+------------------------------------------------------------------+
@@ -62,6 +78,73 @@ void CreateButton(string name, string text, int x, int y, int width, int height,
   }
 
 //+------------------------------------------------------------------+
+//| Create Stop Line                                                 |
+//+------------------------------------------------------------------+
+void CreateStopLine()
+  {
+   if(ObjectFind(0, HLINE_NAME) != 0)
+     {
+      if(!ObjectCreate(0, HLINE_NAME, OBJ_HLINE, 0, 0, 0))
+        {
+         Print("Error creating stop line: ", GetLastError());
+         return;
+        }
+     }
+
+   ObjectSetInteger(0, HLINE_NAME, OBJPROP_COLOR, clrGray);
+   ObjectSetInteger(0, HLINE_NAME, OBJPROP_STYLE, STYLE_SOLID);
+   ObjectSetInteger(0, HLINE_NAME, OBJPROP_WIDTH, 2);
+   ObjectSetDouble(0, HLINE_NAME, OBJPROP_PRICE, 0, SymbolInfoDouble(_Symbol, SYMBOL_ASK));
+   ObjectSetInteger(0, HLINE_NAME, OBJPROP_SELECTABLE, true);
+   ObjectSetInteger(0, HLINE_NAME, OBJPROP_SELECTED, false);
+  }
+
+//+------------------------------------------------------------------+
+//| Create Status Box                                                |
+//+------------------------------------------------------------------+
+void CreateStatusBox()
+  {
+   if(ObjectFind(0, STATUS_BOX_NAME) != 0)
+     {
+      if(!ObjectCreate(0, STATUS_BOX_NAME, OBJ_RECTANGLE_LABEL, 0, 0, 0))
+        {
+         Print("Error creating status box: ", GetLastError());
+         return;
+        }
+     }
+
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_XDISTANCE, 280, 0);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_YDISTANCE, 50);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_XSIZE, 25);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_YSIZE, 25);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_BGCOLOR, clrGray);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+  }
+
+//+------------------------------------------------------------------+
+//| Update UI State                                                  |
+//+------------------------------------------------------------------+
+void UpdateUIState()
+  {
+   color newColor = clrGray;
+   switch(pendingOrderType)
+     {
+      case BUY:
+         newColor = clrGreen;
+         break;
+      case SELL:
+         newColor = clrRed;
+         break;
+     }
+
+   ObjectSetInteger(0, HLINE_NAME, OBJPROP_COLOR, newColor);
+   ObjectSetInteger(0, STATUS_BOX_NAME, OBJPROP_BGCOLOR, newColor);
+   ChartRedraw();
+  }
+
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
@@ -72,6 +155,10 @@ int OnInit()
 //--- buttons
    CreateButton("BuyButton", "BUY", 200, 50, 70, 25, clrGreen, clrWhite, CORNER_LEFT_LOWER);
    CreateButton("SellButton", "SELL", 120, 50, 70, 25, clrRed, clrWhite, CORNER_LEFT_LOWER);
+
+//--- stop line and status box
+   CreateStopLine();
+   CreateStatusBox();
 
    return(INIT_SUCCEEDED);
   }
@@ -169,9 +256,39 @@ void TrailingStopModifyOrders()
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
+void CheckForTradeExecution()
+  {
+   if(pendingOrderType == NONE)
+      return;
+
+   double linePrice = ObjectGetDouble(0, HLINE_NAME, OBJPROP_PRICE, 0);
+
+   if(pendingOrderType == BUY)
+     {
+      double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      if(currentPrice >= linePrice)
+        {
+         ExecuteTrade(ORDER_TYPE_BUY);
+         pendingOrderType = NONE;
+         UpdateUIState();
+        }
+     }
+   else if(pendingOrderType == SELL)
+     {
+      double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      if(currentPrice <= linePrice)
+        {
+         ExecuteTrade(ORDER_TYPE_SELL);
+         pendingOrderType = NONE;
+         UpdateUIState();
+        }
+     }
+  }
+
 void OnTick()
   {
    TrailingStopModifyOrders();
+   CheckForTradeExecution();
   }
 
 //+------------------------------------------------------------------+
@@ -260,11 +377,27 @@ void OnChartEvent(const int id,
      {
       if(sparam == "BuyButton")
         {
-         ExecuteTrade(ORDER_TYPE_BUY);
+         if(pendingOrderType == BUY)
+           {
+            pendingOrderType = NONE;
+           }
+         else
+           {
+            pendingOrderType = BUY;
+           }
+         UpdateUIState();
         }
       if(sparam == "SellButton")
         {
-         ExecuteTrade(ORDER_TYPE_SELL);
+         if(pendingOrderType == SELL)
+           {
+            pendingOrderType = NONE;
+           }
+         else
+           {
+            pendingOrderType = SELL;
+           }
+         UpdateUIState();
         }
      }
   }
