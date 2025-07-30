@@ -11,25 +11,15 @@
 
 //--- Input parameters for trade levels
 input group "Trade Levels (in Points)"
-input int InpTakeProfit = 5000;       // Take Profit in points
-input int InpStopLoss = 70000;         // Stop Loss in points
-input int InpTrailingStop = 0;       // Trailing Stop in points (0 = disabled)
+input int InpTakeProfit = 10600;       // Take Profit in points
+input int InpStopLoss = 70000;        // Stop Loss in points
+input int InpTrailingStop = 0;        // Trailing Stop in points (0 = disabled)
 input int InpTrailingStep = 1;        // Trailing Step in points
 input int InpStartTrailingPoint = 5001; // Start Trailing Point in points
 
 //--- Input parameter for lot size
 input group "Lot Size Management"
 input double InpLotSize = 0.0;        // Lot size (0.0 = dynamic calculation)
-
-//--- pending trade status
-enum ENUM_PENDING_TRADE
-  {
-   PENDING_NONE,
-   PENDING_BUY,
-   PENDING_SELL
-  };
-
-ENUM_PENDING_TRADE pending_trade = PENDING_NONE;
 
 CTrade trade;
 
@@ -40,9 +30,6 @@ void DeleteIndicatorObjects()
   {
    ObjectDelete(0, "BuyButton");
    ObjectDelete(0, "SellButton");
-   ObjectDelete(0, "PendingStatusBox");
-   ObjectDelete(0, "TakeProfitBuy");
-   ObjectDelete(0, "TakeProfitSell");
   }
 
 //+------------------------------------------------------------------+
@@ -82,22 +69,13 @@ int OnInit()
 //--- clean up existing objects
    DeleteIndicatorObjects();
 
-//--- pending status box
-   ObjectCreate(0, "PendingStatusBox", OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_CORNER,CORNER_LEFT_LOWER);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_XDISTANCE,280);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_YDISTANCE,50);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_XSIZE,15);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_YSIZE,15);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_BGCOLOR,clrLightGray);
-   ObjectSetInteger(0,"PendingStatusBox",OBJPROP_BACK,false);
-
 //--- buttons
    CreateButton("BuyButton", "BUY", 200, 50, 70, 25, clrGreen, clrWhite, CORNER_LEFT_LOWER);
    CreateButton("SellButton", "SELL", 120, 50, 70, 25, clrRed, clrWhite, CORNER_LEFT_LOWER);
 
    return(INIT_SUCCEEDED);
   }
+
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
@@ -105,12 +83,11 @@ void OnDeinit(const int reason)
   {
    //--- clean up all objects created by the indicator
    DeleteIndicatorObjects();
-   ObjectDelete(0, "IdentifiedCandleLine");
-   ObjectDelete(0, "AskLine");
    
    //--- clear comment
    Comment("");
   }
+
 //+------------------------------------------------------------------+
 //| Trailing Stop Logic                                              |
 //+------------------------------------------------------------------+
@@ -193,14 +170,10 @@ void TrailingStopModifyOrders()
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
-{
-    TrailingStopModifyOrders();
+  {
+   TrailingStopModifyOrders();
+  }
 
-    // Draw Take Profit Lines
-    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-    DrawTakeProfitLines(ask, bid);
-}
 //+------------------------------------------------------------------+
 //| Calculate Lot Size                                               |
 //+------------------------------------------------------------------+
@@ -272,9 +245,8 @@ void ExecuteTrade(ENUM_ORDER_TYPE orderType)
       tpPrice = (InpTakeProfit > 0) ? currentPrice - InpTakeProfit * _Point : 0.0;
       trade.Sell(lot, _Symbol, currentPrice, slPrice, tpPrice);
      }
-   pending_trade = PENDING_NONE;
-   ObjectSetInteger(0, "PendingStatusBox", OBJPROP_BGCOLOR, clrLightGray);
   }
+
 //+------------------------------------------------------------------+
 //| ChartEvent function                                              |
 //+------------------------------------------------------------------+
@@ -288,116 +260,12 @@ void OnChartEvent(const int id,
      {
       if(sparam == "BuyButton")
         {
-         if(pending_trade == PENDING_BUY)
-           {
-            pending_trade = PENDING_NONE;
-            ObjectSetInteger(0, "PendingStatusBox", OBJPROP_BGCOLOR, clrLightGray);
-           }
-         else
-           {
-            ExecuteTrade(ORDER_TYPE_BUY);
-           }
+         ExecuteTrade(ORDER_TYPE_BUY);
         }
       if(sparam == "SellButton")
         {
-         if(pending_trade == PENDING_SELL)
-           {
-            pending_trade = PENDING_NONE;
-            ObjectSetInteger(0, "PendingStatusBox", OBJPROP_BGCOLOR, clrLightGray);
-           }
-         else
-           {
-            ExecuteTrade(ORDER_TYPE_SELL);
-           }
+         ExecuteTrade(ORDER_TYPE_SELL);
         }
      }
   }
-//+------------------------------------------------------------------+
-//| Draw Take Profit Lines                                           |
-//+------------------------------------------------------------------+
-void DrawTakeProfitLines(double ask, double bid)
-{
-    if (InpTakeProfit <= 0)
-    {
-        ObjectDelete(0, "TakeProfitBuy");
-        ObjectDelete(0, "TakeProfitSell");
-        ObjectDelete(0, "AskLine");
-        return;
-    }
-
-    // Calculate Take Profit levels
-    double tp_buy_level = ask + InpTakeProfit * _Point;
-    double tp_sell_level = bid - InpTakeProfit * _Point;
-
-    // Line names
-    string buy_line_name = "TakeProfitBuy";
-    string sell_line_name = "TakeProfitSell";
-    string ask_line_name = "AskLine";
-
-    // Get start time at current bar (shift 0)
-    datetime start_time = iTime(_Symbol, _Period, 0);
-
-    // TP lines: Get end time 3 bars ahead
-    int bars_total = Bars(_Symbol, _Period);
-    datetime end_time_tp;
-    if (bars_total >= 4)
-        end_time_tp = iTime(_Symbol, _Period, 0) + (iTime(_Symbol, _Period, 0) - iTime(_Symbol, _Period, 1)) * 3;
-    else
-        end_time_tp = TimeCurrent() + 3 * PeriodSeconds();  // fallback
-
-    // Ask line: Shorter span (e.g., 1 bar ahead)
-    datetime end_time_ask;
-    if (bars_total >= 2)
-        end_time_ask = iTime(_Symbol, _Period, 0) + (iTime(_Symbol, _Period, 0) - iTime(_Symbol, _Period, 1));
-    else
-        end_time_ask = TimeCurrent() + PeriodSeconds();  // fallback
-
-    // Draw Buy TP Line
-    if (ObjectFind(0, buy_line_name) < 0)
-    {
-        ObjectCreate(0, buy_line_name, OBJ_TREND, 0, start_time, tp_buy_level, end_time_tp, tp_buy_level);
-        ObjectSetInteger(0, buy_line_name, OBJPROP_WIDTH, 1);
-        ObjectSetInteger(0, buy_line_name, OBJPROP_STYLE, STYLE_DOT);
-        ObjectSetInteger(0, buy_line_name, OBJPROP_RAY_RIGHT, false);
-        ObjectSetInteger(0, buy_line_name, OBJPROP_SELECTABLE, false);
-    }
-    else
-    {
-        ObjectMove(0, buy_line_name, 0, start_time, tp_buy_level);
-        ObjectMove(0, buy_line_name, 1, end_time_tp, tp_buy_level);
-    }
-    ObjectSetInteger(0, buy_line_name, OBJPROP_COLOR, clrGreen);
-
-    // Draw Sell TP Line
-    if (ObjectFind(0, sell_line_name) < 0)
-    {
-        ObjectCreate(0, sell_line_name, OBJ_TREND, 0, start_time, tp_sell_level, end_time_tp, tp_sell_level);
-        ObjectSetInteger(0, sell_line_name, OBJPROP_WIDTH, 1);
-        ObjectSetInteger(0, sell_line_name, OBJPROP_STYLE, STYLE_DOT);
-        ObjectSetInteger(0, sell_line_name, OBJPROP_RAY_RIGHT, false);
-        ObjectSetInteger(0, sell_line_name, OBJPROP_SELECTABLE, false);
-    }
-    else
-    {
-        ObjectMove(0, sell_line_name, 0, start_time, tp_sell_level);
-        ObjectMove(0, sell_line_name, 1, end_time_tp, tp_sell_level);
-    }
-    ObjectSetInteger(0, sell_line_name, OBJPROP_COLOR, clrRed);
-
-    // Draw Ask Line (shorter length)
-    if (ObjectFind(0, ask_line_name) < 0)
-    {
-        ObjectCreate(0, ask_line_name, OBJ_TREND, 0, start_time, ask, end_time_ask, ask);
-        ObjectSetInteger(0, ask_line_name, OBJPROP_WIDTH, 1);
-        ObjectSetInteger(0, ask_line_name, OBJPROP_STYLE, STYLE_SOLID);
-        ObjectSetInteger(0, ask_line_name, OBJPROP_RAY_RIGHT, false);
-        ObjectSetInteger(0, ask_line_name, OBJPROP_SELECTABLE, false);
-    }
-    else
-    {
-        ObjectMove(0, ask_line_name, 0, start_time, ask);
-        ObjectMove(0, ask_line_name, 1, end_time_ask, ask);
-    }
-    ObjectSetInteger(0, ask_line_name, OBJPROP_COLOR, clrBlue);
-}
 //+------------------------------------------------------------------+
