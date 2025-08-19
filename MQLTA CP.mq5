@@ -57,8 +57,6 @@ input bool DetectBearishThreeLineStrike = true;          // Bearish Three-Line S
 input bool DetectThreeOutsideUp = true;                  // Three Outside Up
 input bool DetectThreeOutsideDown = true;                // Three Outside Down
 input string Comment_2b = "====================";        // Display Options
-input bool ShowPatternName = true;                       // Show Pattern Name
-input string Font = "Verdana";                           // Font Face
 input int FontSize = 8;                                  // Font Size
 input color FontColorBullish = clrGreen;                 // Font Color Bullish Patterns
 input color FontColorBearish = clrRed;                   // Font Color Bearish Patterns
@@ -159,11 +157,15 @@ void OnChartEvent(const int id,
         }
     }
     // Redraw labels.
-    else if (id == CHARTEVENT_CHART_CHANGE) RedrawVisibleLabels();
+    else if (id == CHARTEVENT_CHART_CHANGE)
+    {
+    }
     else if (id == CHARTEVENT_KEYDOWN)
     {
         // Home, End, PgUp, PgDn, Arrows, F12.
-        if (((TranslateKey((int)lparam) >= 33) && (TranslateKey((int)lparam) <= 40)) || (TranslateKey((int)lparam) == 123)) RedrawVisibleLabels();
+        if (((TranslateKey((int)lparam) >= 33) && (TranslateKey((int)lparam) <= 40)) || (TranslateKey((int)lparam) == 123))
+        {
+        }
     }
 }
 
@@ -395,73 +397,46 @@ void DrawLabel(int Index, string Label, ENUM_TYPE_OF_PATTERN Type, ENUM_CANDLEST
     if ((Type == BEARISH) && (!DetectBearish)) return;
     if ((Type == UNCERTAIN) && (!DetectUncertain)) return;
     BufferPatternDetected[Index] = Pattern;
-    string LabelName = "";
     string ArrowName = "";
-    ENUM_OBJECT ArrowType = -1;
     color Color = clrNONE;
-    int TextAnchor = 0;
     int ArrowAnchor = 0;
     datetime CandleTime = iTime(Symbol(), Period(), Index);
     double PriceArrow = 0;
-    int ArrowWidth = 0;
-    if (FontSize >= 10) ArrowWidth = 2;
-    else ArrowWidth = 1;
+    int ArrowCode = 0;
 
     if (Type == UNCERTAIN)
     {
         Color = FontColorUncertain;
-        TextAnchor = ANCHOR_LEFT;
         ArrowAnchor = ANCHOR_BOTTOM;
         PriceArrow = iHigh(Symbol(), Period(), Index);
-        ArrowType = OBJ_ARROW_DOWN;
         BufferPatternDirection[Index] = 0;
+        ArrowCode = 234;
     }
     else if (Type == BULLISH)
     {
         Color = FontColorBullish;
-        TextAnchor = ANCHOR_RIGHT;
         ArrowAnchor = ANCHOR_TOP;
         PriceArrow = iLow(Symbol(), Period(), Index);
-        ArrowType = OBJ_ARROW_UP;
         BufferPatternDirection[Index] = 1;
+        ArrowCode = 233;
     }
     else if (Type == BEARISH)
     {
         Color = FontColorBearish;
-        TextAnchor = ANCHOR_LEFT;
         ArrowAnchor = ANCHOR_BOTTOM;
         PriceArrow = iHigh(Symbol(), Period(), Index);
-        ArrowType = OBJ_ARROW_DOWN;
         BufferPatternDirection[Index] = -1;
+        ArrowCode = 234;
     }
 
-    LabelName = IndicatorName + "-CANDLE-LBL-" + IntegerToString(CandleTime);
     ArrowName = IndicatorName + "-CANDLE-ARR-" + IntegerToString(CandleTime);
-    if (ShowPatternName)
-    {
-        ObjectCreate(0, LabelName, OBJ_TEXT, 0, CandleTime, 0); // Zero price because labels are dynamically moved.
-        ObjectSetDouble(0, LabelName, OBJPROP_ANGLE, 90);
-        ObjectSetInteger(0, LabelName, OBJPROP_ANCHOR, TextAnchor);
-        ObjectSetInteger(0, LabelName, OBJPROP_BACK, false);
-        ObjectSetInteger(0, LabelName, OBJPROP_HIDDEN, true);
-        ObjectSetInteger(0, LabelName, OBJPROP_FONTSIZE, FontSize);
-        ObjectSetString(0, LabelName, OBJPROP_FONT, Font);
-        ObjectSetString(0, LabelName, OBJPROP_TEXT, Label);
-        ObjectSetInteger(0, LabelName, OBJPROP_SELECTABLE, false);
-        ObjectSetInteger(0, LabelName, OBJPROP_COLOR, Color);
-        // Move label to the correct price based on the chart scale.
-        int visible_bars = (int)ChartGetInteger(0, CHART_VISIBLE_BARS);
-        int first_bar = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
-        int last_bar = first_bar - visible_bars + 1;
-        if ((Index <= first_bar) && (Index >= last_bar)) RedrawOneLabel(Index, last_bar);
-    }
-
-    ObjectCreate(0, ArrowName, ArrowType, 0, CandleTime, PriceArrow);
+    ObjectCreate(0, ArrowName, OBJ_TEXT, 0, CandleTime, PriceArrow);
+    ObjectSetString(0, ArrowName, OBJPROP_TEXT, CharToString(ArrowCode));
+    ObjectSetString(0, ArrowName, OBJPROP_FONT, "Wingdings");
+    ObjectSetInteger(0, ArrowName, OBJPROP_FONTSIZE, FontSize);
     ObjectSetInteger(0, ArrowName, OBJPROP_ANCHOR, ArrowAnchor);
     ObjectSetInteger(0, ArrowName, OBJPROP_BACK, false);
     ObjectSetInteger(0, ArrowName, OBJPROP_HIDDEN, true);
-    ObjectSetInteger(0, ArrowName, OBJPROP_STYLE, STYLE_SOLID);
-    ObjectSetInteger(0, ArrowName, OBJPROP_WIDTH, ArrowWidth);
     ObjectSetInteger(0, ArrowName, OBJPROP_SELECTABLE, false);
     ObjectSetInteger(0, ArrowName, OBJPROP_COLOR, Color);
 
@@ -529,40 +504,4 @@ void CreateMiniPanel()
     ChartRedraw();
 }
 
-// Redraws all visible labels on the current chart to their correct position.
-void RedrawVisibleLabels()
-{
-    int visible_bars = (int)ChartGetInteger(0, CHART_VISIBLE_BARS);
-    int first_bar = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
-    int last_bar = first_bar - visible_bars + 1;
-
-    // Process all bars on the current screen.
-    for (int i = first_bar; i >= last_bar; i--) RedrawOneLabel(i, last_bar);
-    ChartRedraw();
-}
-
-void RedrawOneLabel(const int i, const int last_bar)
-{
-    int x, y, cw;
-    uint w, h;
-    datetime t;
-    double p;
-    
-    string name = IndicatorName + "-CANDLE-LBL-" + IntegerToString(iTime(Symbol(), Period(), i));
-    if (ObjectFind(0, name) == -1) return;
-    bool dir;
-    if ((ObjectGetInteger(0, name, OBJPROP_COLOR) == FontColorBearish) || (ObjectGetInteger(0, name, OBJPROP_COLOR) == FontColorUncertain)) dir = true;
-    else dir = false;
-    if (dir == true) p = iHigh(Symbol(), Period(), i);
-    else p = iLow(Symbol(), Period(), i);
-    // Needed only for y; x is used as a dummy.
-    ChartTimePriceToXY(0, 0, iTime(Symbol(), Period(), last_bar), p, x, y);
-    // Get the height of the text based on font and its size. Negative because OS-dependent, *10 because set in 1/10 of pt.
-    TextSetFont(Font, FontSize * -10);
-    string text = "A"; // Just a dumy text.
-    TextGetSize(text, w, h);
-    if (dir == true) ChartXYToTimePrice(0, x, y - h - 10, cw, t, p); // -10 for some padding above the arrow.
-    else ChartXYToTimePrice(0, x, y + h + 5, cw, t, p); // + 5 for some padding below the arrow.
-    ObjectSetDouble(0, name, OBJPROP_PRICE, p);
-}
 //+------------------------------------------------------------------+
