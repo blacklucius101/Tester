@@ -57,6 +57,7 @@ input bool DetectBearishThreeLineStrike = true;          // Bearish Three-Line S
 input bool DetectThreeOutsideUp = true;                  // Three Outside Up
 input bool DetectThreeOutsideDown = true;                // Three Outside Down
 input string Comment_2b = "====================";        // Display Options
+input bool ShowPatternName = true;                       // Show Pattern Name
 input string Font = "Verdana";                           // Font Face
 input int FontSize = 8;                                  // Font Size
 input color FontColorBullish = clrGreen;                 // Font Color Bullish Patterns
@@ -436,22 +437,24 @@ void DrawLabel(int Index, string Label, ENUM_TYPE_OF_PATTERN Type, ENUM_CANDLEST
 
     LabelName = IndicatorName + "-CANDLE-LBL-" + IntegerToString(CandleTime);
     ArrowName = IndicatorName + "-CANDLE-ARR-" + IntegerToString(CandleTime);
-    ObjectCreate(0, LabelName, OBJ_TEXT, 0, CandleTime, 0); // Zero price because labels are dynamically moved.
-    ObjectSetDouble(0, LabelName, OBJPROP_ANGLE, 90);
-    ObjectSetInteger(0, LabelName, OBJPROP_ANCHOR, TextAnchor);
-    ObjectSetInteger(0, LabelName, OBJPROP_BACK, false);
-    ObjectSetInteger(0, LabelName, OBJPROP_HIDDEN, true);
-    ObjectSetInteger(0, LabelName, OBJPROP_FONTSIZE, FontSize);
-    ObjectSetString(0, LabelName, OBJPROP_FONT, Font);
-    ObjectSetString(0, LabelName, OBJPROP_TEXT, Label);
-    ObjectSetInteger(0, LabelName, OBJPROP_SELECTABLE, false);
-    ObjectSetInteger(0, LabelName, OBJPROP_COLOR, Color);
-    // Move label to the correct price based on the chart scale.
-    int visible_bars = (int)ChartGetInteger(0, CHART_VISIBLE_BARS);
-    int first_bar = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
-    int last_bar = first_bar - visible_bars + 1;
-    if ((Index <= first_bar) && (Index >= last_bar)) RedrawOneLabel(Index, last_bar);
-
+    if (ShowPatternName)
+    {
+        ObjectCreate(0, LabelName, OBJ_TEXT, 0, CandleTime, 0); // Zero price because labels are dynamically moved.
+        ObjectSetDouble(0, LabelName, OBJPROP_ANGLE, 90);
+        ObjectSetInteger(0, LabelName, OBJPROP_ANCHOR, TextAnchor);
+        ObjectSetInteger(0, LabelName, OBJPROP_BACK, false);
+        ObjectSetInteger(0, LabelName, OBJPROP_HIDDEN, true);
+        ObjectSetInteger(0, LabelName, OBJPROP_FONTSIZE, FontSize);
+        ObjectSetString(0, LabelName, OBJPROP_FONT, Font);
+        ObjectSetString(0, LabelName, OBJPROP_TEXT, Label);
+        ObjectSetInteger(0, LabelName, OBJPROP_SELECTABLE, false);
+        ObjectSetInteger(0, LabelName, OBJPROP_COLOR, Color);
+        // Move label to the correct price based on the chart scale.
+        int visible_bars = (int)ChartGetInteger(0, CHART_VISIBLE_BARS);
+        int first_bar = (int)ChartGetInteger(0, CHART_FIRST_VISIBLE_BAR);
+        int last_bar = first_bar - visible_bars + 1;
+        if ((Index <= first_bar) && (Index >= last_bar)) RedrawOneLabel(Index, last_bar);
+    }
 
     ObjectCreate(0, ArrowName, ArrowType, 0, CandleTime, PriceArrow);
     ObjectSetInteger(0, ArrowName, OBJPROP_ANCHOR, ArrowAnchor);
