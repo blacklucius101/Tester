@@ -13,7 +13,7 @@
 //--- plot AATR
 #property indicator_label1  "AATR"
 #property indicator_type1   DRAW_COLOR_HISTOGRAM
-#property indicator_color1  clrPurple,clrGreen,clrDodgerBlue,clrRed
+#property indicator_color1  clrGreen,clrRed,clrDodgerBlue,clrYellow
 #property indicator_style1  STYLE_SOLID
 #property indicator_width1  2
 //--- enums
@@ -155,16 +155,7 @@ int OnCalculate(const int rates_total,
      }
 
    for(int i=limit; i>=0 && !IsStopped(); i--)
-     {
-      if(BufferAATR[i]>top)
-         BufferColors[i]=0;
-      else if(BufferAATR[i]>middle)
-         BufferColors[i]=1;
-      else if(BufferAATR[i]>bottom)
-         BufferColors[i]=2;
-      else
-         BufferColors[i]=3;
-     }
+      BufferColors[i]=(BufferAATR[i]>top ? 0 : BufferAATR[i]<bottom ? 1 : (BufferAATR[i]>middle ? 3 : 2));
 
 //--- return value of prev_calculated for next call
    return(rates_total);
