@@ -13,7 +13,7 @@
 //--- plot AATR
 #property indicator_label1  "AATR"
 #property indicator_type1   DRAW_COLOR_HISTOGRAM
-#property indicator_color1  clrGreen,clrRed,clrDodgerBlue
+#property indicator_color1  clrPurple,clrGreen,clrDodgerBlue,clrRed
 #property indicator_style1  STYLE_SOLID
 #property indicator_width1  2
 //--- enums
@@ -24,7 +24,8 @@ enum ENUM_MODE
   };
 //--- input parameters
 input uint        InpPeriod   =  12;            // ATR period
-input double      InpLevelH   =  3700.0;         // Higher level
+input double      InpLevelH   =  6200.0;         // Higher level
+input double      InpLevelM   =  3700.0;         // Middle level
 input double      InpLevelL   =  2700.0;         // Lower level
 input ENUM_MODE   InpMode     =  MODE_POINTS;   // Calculation mode
 input uint        InpMaxBars  =  1000.0;        // Maximum bars
@@ -33,8 +34,10 @@ double         BufferAATR[];
 double         BufferColors[];
 //--- global variables
 double         level_h;
+double         level_m;
 double         level_l;
 double         last_top;
+double         last_mid;
 double         last_bottom;
 int            period_atr;
 int            max_bars;
@@ -47,19 +50,22 @@ int OnInit()
 //--- set global variables
    period_atr=int(InpPeriod<1 ? 1 : InpPeriod);
    level_h=InpLevelH;
+   level_m=InpLevelM;
    level_l=InpLevelL;
    last_top=0;
+   last_mid=0;
    last_bottom=0;
 //--- indicator buffers mapping
    SetIndexBuffer(0,BufferAATR,INDICATOR_DATA);
    SetIndexBuffer(1,BufferColors,INDICATOR_COLOR_INDEX);
 //--- setting indicator parameters
    string pf=(InpMode==MODE_PERCENT ? "%" : "");
-   IndicatorSetString(INDICATOR_SHORTNAME,"ATR Volatility ("+(string)period_atr+","+DoubleToString(level_h,1)+pf+","+DoubleToString(level_l,1)+pf+")");
+   IndicatorSetString(INDICATOR_SHORTNAME,"ATR Volatility ("+(string)period_atr+","+DoubleToString(level_h,1)+pf+","+DoubleToString(level_m,1)+pf+","+DoubleToString(level_l,1)+pf+")");
    IndicatorSetInteger(INDICATOR_DIGITS,Digits());
-   IndicatorSetInteger(INDICATOR_LEVELS,2);
+   IndicatorSetInteger(INDICATOR_LEVELS,3);
    IndicatorSetInteger(INDICATOR_LEVELCOLOR,0,clrDodgerBlue);
-   IndicatorSetInteger(INDICATOR_LEVELCOLOR,1,clrOrangeRed);
+   IndicatorSetInteger(INDICATOR_LEVELCOLOR,1,clrGray);
+   IndicatorSetInteger(INDICATOR_LEVELCOLOR,2,clrOrangeRed);
 //--- setting buffer arrays as timeseries
    ArraySetAsSeries(BufferAATR,true);
    ArraySetAsSeries(BufferColors,true);
@@ -117,17 +123,19 @@ int OnCalculate(const int rates_total,
    double min=BufferAATR[bl];
    double max=BufferAATR[bh];
 
-   double top=0,bottom=0,percentage=0;
+   double top=0,mid=0,bottom=0,percentage=0;
 
    if(InpMode==MODE_POINTS)
      {
       top=level_h*Point();
+      mid=level_m*Point();
       bottom=level_l*Point();
      }
    else
      {
       percentage=(max-min)/100.0;
       top=min+level_h*percentage;
+      mid=min+level_m*percentage;
       bottom=min+level_l*percentage; 
      }
    if(last_top!=top)
@@ -135,14 +143,19 @@ int OnCalculate(const int rates_total,
       IndicatorSetDouble(INDICATOR_LEVELVALUE,0,top);
       last_top=top;
      }
+   if(last_mid!=mid)
+     {
+      IndicatorSetDouble(INDICATOR_LEVELVALUE,1,mid);
+      last_mid=mid;
+     }
    if(last_bottom!=bottom)
      {
-      IndicatorSetDouble(INDICATOR_LEVELVALUE,1,bottom);
+      IndicatorSetDouble(INDICATOR_LEVELVALUE,2,bottom);
       last_bottom=bottom;
      }
 
    for(int i=limit; i>=0 && !IsStopped(); i--)
-      BufferColors[i]=(BufferAATR[i]>top ? 0 : BufferAATR[i]<bottom ? 1 : 2);
+      BufferColors[i]=(BufferAATR[i]>top) ? 0 : (BufferAATR[i]>mid) ? 1 : (BufferAATR[i]>bottom) ? 2 : 3;
 
 //--- return value of prev_calculated for next call
    return(rates_total);
