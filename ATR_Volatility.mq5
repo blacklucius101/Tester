@@ -13,7 +13,7 @@
 //--- plot AATR
 #property indicator_label1  "AATR"
 #property indicator_type1   DRAW_COLOR_HISTOGRAM
-#property indicator_color1  clrGreen,clrRed,clrDodgerBlue,clrYellow
+#property indicator_color1  clrPurple,clrGreen,clrDodgerBlue,clrRed
 #property indicator_style1  STYLE_SOLID
 #property indicator_width1  2
 //--- enums
@@ -24,9 +24,9 @@ enum ENUM_MODE
   };
 //--- input parameters
 input uint        InpPeriod   =  12;            // ATR period
-input double      InpLevelH   =  300.0;         // Higher level
-input double      InpLevelM   =  250.0;         // Middle level
-input double      InpLevelL   =  200.0;         // Lower level
+input double      InpLevelH   =  6200.0;         // Higher level
+input double      InpLevelM   =  3700.0;         // Middle level
+input double      InpLevelL   =  2700.0;         // Lower level
 input ENUM_MODE   InpMode     =  MODE_POINTS;   // Calculation mode
 input uint        InpMaxBars  =  1000.0;        // Maximum bars
 //--- indicator buffers
@@ -155,7 +155,16 @@ int OnCalculate(const int rates_total,
      }
 
    for(int i=limit; i>=0 && !IsStopped(); i--)
-      BufferColors[i]=(BufferAATR[i]>top ? 0 : BufferAATR[i]<bottom ? 1 : (BufferAATR[i]>middle ? 3 : 2));
+     {
+      if(BufferAATR[i]>top)
+         BufferColors[i]=0;
+      else if(BufferAATR[i]>middle)
+         BufferColors[i]=1;
+      else if(BufferAATR[i]>bottom)
+         BufferColors[i]=2;
+      else
+         BufferColors[i]=3;
+     }
 
 //--- return value of prev_calculated for next call
    return(rates_total);
