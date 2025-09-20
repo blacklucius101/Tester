@@ -20,6 +20,22 @@ input string   CloseKey = "2";
 input group "=== RISK ==="
 input int      MaxPositions = 1;
 
+// --- TP/SL UI ---
+enum SLTP_MODE {
+    MODE_POINTS,
+    MODE_CURRENCY
+};
+
+SLTP_MODE tpMode = MODE_POINTS;
+SLTP_MODE slMode = MODE_POINTS;
+
+double currentTakeProfit;
+double currentStopLoss;
+
+string tpDownBtn, tpUpBtn, tpModeBtn, tpLabel;
+string slDownBtn, slUpBtn, slModeBtn, slLabel;
+// --- END TP/SL UI ---
+
 CTrade trade;
 CPositionInfo position;
 
@@ -58,6 +74,20 @@ int OnInit()
     trade.SetDeviationInPoints(Slippage);
     resetTime = TimeCurrent();
     dailyPL = GetDailyPL();
+    
+    // --- TP/SL UI Init ---
+    currentTakeProfit = TakeProfit;
+    currentStopLoss = StopLoss;
+    
+    tpDownBtn = prefix + "TP_DOWN";
+    tpUpBtn = prefix + "TP_UP";
+    tpModeBtn = prefix + "TP_MODE";
+    tpLabel = prefix + "TP_LABEL";
+    slDownBtn = prefix + "SL_DOWN";
+    slUpBtn = prefix + "SL_UP";
+    slModeBtn = prefix + "SL_MODE";
+    slLabel = prefix + "SL_LABEL";
+    // --- END TP/SL UI Init ---
     
     Print("=== DASHBOARD INITIALIZATION ===");
     Print("Symbol: ", _Symbol);
@@ -106,6 +136,14 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
             FlashButton(closeBtn, C'255,150,0');
             ObjectSetInteger(0, closeBtn, OBJPROP_STATE, false);
         }
+        // --- TP/SL UI Events ---
+        else if(sparam == tpUpBtn) { currentTakeProfit++; UpdateTPDisplay(); }
+        else if(sparam == tpDownBtn) { if(currentTakeProfit > 0) currentTakeProfit--; UpdateTPDisplay(); }
+        else if(sparam == tpModeBtn) { tpMode = (tpMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateTPDisplay(); }
+        else if(sparam == slUpBtn) { currentStopLoss++; UpdateSLDisplay(); }
+        else if(sparam == slDownBtn) { if(currentStopLoss > 0) currentStopLoss--; UpdateSLDisplay(); }
+        else if(sparam == slModeBtn) { slMode = (slMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateSLDisplay(); }
+        // --- END TP/SL UI Events ---
         ChartRedraw();
     }
     else if(id == CHARTEVENT_KEYDOWN && EnableHotkeys)
@@ -146,6 +184,41 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
     }
 }
 
+void UpdateTPDisplay()
+{
+    string currencySymbol = AccountInfoString(ACCOUNT_CURRENCY);
+    string mode = (tpMode == MODE_POINTS) ? "points" : currencySymbol;
+    string value = (tpMode == MODE_POINTS) ? IntegerToString((int)currentTakeProfit) : DoubleToString(currentTakeProfit, 2);
+    ObjectSetString(0, tpLabel, OBJPROP_TEXT, "TP: " + value + " " + mode);
+    ObjectSetString(0, tpModeBtn, OBJPROP_TEXT, (tpMode == MODE_POINTS) ? "P" : currencySymbol);
+}
+
+void UpdateSLDisplay()
+{
+    string currencySymbol = AccountInfoString(ACCOUNT_CURRENCY);
+    string mode = (slMode == MODE_POINTS) ? "points" : currencySymbol;
+    string value = (slMode == MODE_POINTS) ? IntegerToString((int)currentStopLoss) : DoubleToString(currentStopLoss, 2);
+    ObjectSetString(0, slLabel, OBJPROP_TEXT, "SL: " + value + " " + mode);
+    ObjectSetString(0, slModeBtn, OBJPROP_TEXT, (slMode == MODE_POINTS) ? "P" : currencySymbol);
+}
+
+void CreateProButtonSmall(string name, int x, int y, int w, int h, string text, color bg, color hover, color textColor)
+{
+    ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+    ObjectSetString(0, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
+    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+    ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, hover);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
+    ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+    ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+}
+
+
 void CreateFuturisticDashboard()
 {
     int x = DashX;
@@ -154,7 +227,7 @@ void CreateFuturisticDashboard()
     int btnH = 50;
     int gap = 8;
     int panelW = (btnW * 2) + gap + 40;
-    int panelH = 270;
+    int panelH = 370; // Increased panel height
     
     CreateProPanel(glowPanel, x-20, y-20, panelW+40, panelH+40);
     CreateMainPanel(mainPanel, x-10, y-10, panelW+20, panelH+20);
@@ -169,9 +242,34 @@ void CreateFuturisticDashboard()
     btnY += btnH + gap;
     CreateProButton(closeBtn, x + 10, btnY, btnW, btnH, "✕ CLOSE", C'255,140,0', C'255,165,0', C'0,0,0');
     
-    CreateStatsPanel(prefix + "STATS", x + 5, btnY + btnH + 15, panelW - 10, 80);
+    // --- TP/SL UI Elements ---
+    int controlsY = btnY + btnH + 15;
+    CreateStatsPanel(prefix + "TP_PANEL", x + 5, controlsY, panelW - 10, 50);
     
-    int statsY = btnY + btnH + 25;
+    int smallBtnW = 30;
+    int smallBtnH = 20;
+    
+    // Take Profit controls
+    int tpY = controlsY + 15;
+    CreateHeaderLabel(tpLabel, x + 15, tpY, "TP:", C'0,255,255');
+    CreateProButtonSmall(tpDownBtn, x + 170, tpY - 5, smallBtnW, smallBtnH, "-", C'220,20,60', C'255,0,100', C'255,255,255');
+    CreateProButtonSmall(tpUpBtn, x + 210, tpY - 5, smallBtnW, smallBtnH, "+", C'34,139,34', C'0,255,0', C'255,255,255');
+    CreateProButtonSmall(tpModeBtn, x + 250, tpY - 5, 40, smallBtnH, "P", C'70,130,180', C'100,149,237', C'255,255,255');
+
+    // Stop Loss controls
+    int slY = controlsY + 45;
+    CreateHeaderLabel(slLabel, x + 15, slY, "SL:", C'0,255,255');
+    CreateProButtonSmall(slDownBtn, x + 170, slY - 5, smallBtnW, smallBtnH, "-", C'220,20,60', C'255,0,100', C'255,255,255');
+    CreateProButtonSmall(slUpBtn, x + 210, slY - 5, smallBtnW, smallBtnH, "+", C'34,139,34', C'0,255,0', C'255,255,255');
+    CreateProButtonSmall(slModeBtn, x + 250, slY - 5, 40, smallBtnH, "P", C'70,130,180', C'100,149,237', C'255,255,255');
+
+    UpdateTPDisplay();
+    UpdateSLDisplay();
+    // --- END TP/SL UI Elements ---
+
+    CreateStatsPanel(prefix + "STATS", x + 5, slY + 25, panelW - 10, 80);
+    
+    int statsY = slY + 35;
     CreateStatsLabel(posLbl, x + 15, statsY, "POSITIONS", "0", C'0,255,255');
     CreateStatsLabel(spreadLbl, x + 15, statsY + 20, "SPREAD", "0.0", C'255,215,0');
     CreateStatsLabel(plLbl, x + 15, statsY + 40, "DAILY P&L", "$0.00", C'50,205,50');
@@ -319,6 +417,19 @@ void DeleteAllObjects()
     ObjectDelete(0, plLbl);
     ObjectDelete(0, statusLbl);
     ObjectDelete(0, lotLbl);
+    
+    // --- TP/SL UI Cleanup ---
+    ObjectDelete(0, tpDownBtn);
+    ObjectDelete(0, tpUpBtn);
+    ObjectDelete(0, tpModeBtn);
+    ObjectDelete(0, tpLabel);
+    ObjectDelete(0, slDownBtn);
+    ObjectDelete(0, slUpBtn);
+    ObjectDelete(0, slModeBtn);
+    ObjectDelete(0, slLabel);
+    ObjectDelete(0, prefix + "TP_PANEL");
+    // --- END TP/SL UI Cleanup ---
+
     if(EnableHotkeys)
     {
         ObjectDelete(0, prefix + "HOTKEY_PANEL");
@@ -338,11 +449,43 @@ void ExecuteBuy()
     double price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     double sl = 0, tp = 0;
     
-    if(StopLoss > 0)
-        sl = price - StopLoss * _Point;
+    double sl_points = 0;
+    if(slMode == MODE_POINTS)
+    {
+        sl_points = currentStopLoss;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            sl_points = currentStopLoss / one_point_value;
+        }
+    }
+
+    double tp_points = 0;
+    if(tpMode == MODE_POINTS)
+    {
+        tp_points = currentTakeProfit;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            tp_points = currentTakeProfit / one_point_value;
+        }
+    }
+
+    if(sl_points > 0)
+        sl = price - sl_points * _Point;
     
-    if(TakeProfit > 0)
-        tp = price + TakeProfit * _Point;
+    if(tp_points > 0)
+        tp = price + tp_points * _Point;
     
     Print("Attempting BUY: Price=", price, " SL=", sl, " TP=", tp, " Lot=", lot);
     
@@ -369,11 +512,43 @@ void ExecuteSell()
     double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double sl = 0, tp = 0;
     
-    if(StopLoss > 0)
-        sl = price + StopLoss * _Point;
+    double sl_points = 0;
+    if(slMode == MODE_POINTS)
+    {
+        sl_points = currentStopLoss;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            sl_points = currentStopLoss / one_point_value;
+        }
+    }
+
+    double tp_points = 0;
+    if(tpMode == MODE_POINTS)
+    {
+        tp_points = currentTakeProfit;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            tp_points = currentTakeProfit / one_point_value;
+        }
+    }
     
-    if(TakeProfit > 0)
-        tp = price - TakeProfit * _Point;
+    if(sl_points > 0)
+        sl = price + sl_points * _Point;
+    
+    if(tp_points > 0)
+        tp = price - tp_points * _Point;
     
     Print("Attempting SELL: Price=", price, " SL=", sl, " TP=", tp, " Lot=", lot);
     
