@@ -5,82 +5,74 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2022, Manuel Alejandro Cercós Pérez"
 #property link      "https://www.mql5.com/en/users/alexcercos"
-//#property icon      "\\Images\\ProgramIcons\\simplePanelLogo.ico" //Not included
-#property version   "2.08"
+#property version   "3.0"
 
-//+------------------------------------------------------------------+
-//| CHANGES NEEDED TO FIX ISSUES                                     |
-//+------------------------------------------------------------------+
+input group "=== TRADING ===";
+input int      TakeProfit = 50;
+input int      StopLoss = 50;
+input int      TP_Step = 1;
+input int      SL_Step = 1;
+input int      Slippage = 3;
 
-//  To avoid some errors, it's necessary to change code in Dialog.mqh
-// file (to modify variables that are defined as private).
-//  Take into consideration that changes made in standard library
-// files are reverted with each terminal update. To avoid errors
-// when recompiling you can:
-//  - Track with git the changes made in the file to revert the deletion
-//  - Copy the file "Dialog.mqh" into another folder and change
-//   dependencies as needed, so it doesn't change later
-//
-// If you are using MT4, I recommend using the Controls classes from MT5
-// To open the file, press "Alt + G" with the cursor set over the line
-// "#include <Controls\Dialog.mqh>" below.
-//
-// The errors would appear when FIRST COMPILING or after RECOMPILING
-//
-//+------------------------------------------------------------------+
-//| ISSUE 1: DUPLICATED OBJECTS WHEN USING TEMPLATES                 |
-//+------------------------------------------------------------------+
-   #define M_NAME "12345" //Override in panel identifier
-//
-// Change the function "CreateInstanceId" to the one below:
-//+-------------------------------------------------------------------+
-//  string CAppDialog::CreateInstanceId(void)
-//  {
-//  #ifdef M_NAME
-//    return M_NAME;
-//  #else 
-//    return(IntegerToString(rand(),5,'0'));
-//  #endif
-//  }
-//+-------------------------------------------------------------------+
-//
-// If you don't use templates and want to remove the macro M_NAME, 
-// delete also the following line in this file, at the beginning of 
-// OnInitEvent (line 1303):
-//+-------------------------------------------------------------------+
-//  ObjectsDeleteAll(0, M_NAME);
-//+-------------------------------------------------------------------+
+input group "=== DASHBOARD ===";
+input double UIScale = 1.0;  // User adjustable scale factor
+input int      DashX = 30;
+input int      DashY = 30;
+input int      ButtonSize = 90;
 
+#define SX(v) (int)(v * UIScale)
+#define SY(v) (int)(v * UIScale)
 
-//+------------------------------------------------------------------+
-//| ISSUE 2: HEADER FONT SIZE                                        |
-//+------------------------------------------------------------------+
-// This issue is not as common (only if your PC has a different text 
-// size setting than default). You can modify manually the font sizes
-// with the input "fontSize". If you want the header text size to 
-// change too:
-//
-// Uncomment this line (465) in CControlsDialog::Create
-//+-------------------------------------------------------------------+
-//  CaptionFontSize(fontSize);
-//+-------------------------------------------------------------------+
-//
-// Add the function definition to the class CDialog (in public or 
-// protected sections, between lines ~45-85)
-//+-------------------------------------------------------------------+
-//  void CaptionFontSize(const int size) { m_caption.FontSize(size); }
-//+-------------------------------------------------------------------+
+input group "=== KEYBOARD HOTKEYS ===";
+input bool     EnableHotkeys = true;
+input string   BuyKey = "1";
+input string   SellKey = "3"; 
+input string   CloseKey = "2";
+
+input group "=== RISK ===";
+input int      MaxPositions = 1;
+
+// --- TP/SL UI ---
+enum SLTP_MODE {
+    MODE_POINTS,
+    MODE_CURRENCY
+};
 
 #include <Controls\Dialog.mqh>
 #include <Controls\Button.mqh>
 #include <Controls\Edit.mqh>
 #include <Controls\Label.mqh>
 
-#ifdef __MQL5__
-
 #include <Trade\PositionInfo.mqh>
 #include <Trade\OrderInfo.mqh>
 #include <Trade\Trade.mqh>
+
+SLTP_MODE tpMode = MODE_POINTS;
+SLTP_MODE slMode = MODE_POINTS;
+
+double currentTakeProfit;
+double currentStopLoss;
+
+string tpDownBtn, tpUpBtn, tpModeBtn, tpLabel;
+string slDownBtn, slUpBtn, slModeBtn, slLabel;
+
+CTrade trade;
+CPositionInfo position;
+
+string prefix = "FutureDash_";
+double dailyPL = 0;
+datetime resetTime;
+
+string buyBtnName = prefix + "BUY";
+string sellBtnName = prefix + "SELL";
+string closeBtnName = prefix + "CLOSE";
+string posLblName = prefix + "POS";
+string plLblName = prefix + "PL";
+string spreadLblName = prefix + "SPREAD";
+string statusLblName = prefix + "STATUS";
+string mainPanelName = prefix + "PANEL";
+string glowPanelName = prefix + "GLOW";
+string lotLblName = prefix + "LOT";
 
 #define POS_TOTAL PositionsTotal()
 #define ORD_TOTAL OrdersTotal()
@@ -105,72 +97,25 @@
 #define ORD_TAKE_PROFIT m_order.TakeProfit()
 #define ORD_TICKET m_order.Ticket()
 
-#define POS_BUY(lots, price, sl, tp) m_trade.Buy(lots, _Symbol, price, sl, tp, trade_comment);
-#define POS_SELL(lots, price, sl, tp) m_trade.Sell(lots, _Symbol, price, sl, tp, trade_comment);
-#define ORDER_BUY_LIMIT(lots, price, sl, tp) m_trade.BuyLimit(lots, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, trade_comment);
-#define ORDER_BUY_STOP(lots, price, sl, tp) m_trade.BuyStop(lots, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, trade_comment);
-#define ORDER_SELL_LIMIT(lots, price, sl, tp) m_trade.SellLimit(lots, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, trade_comment);
-#define ORDER_SELL_STOP(lots, price, sl, tp) m_trade.SellStop(lots, price, _Symbol, sl, tp, ORDER_TIME_GTC, 0, trade_comment);
-#define POS_MODIFY(ticket, stop, take) if(!m_trade.PositionModify(ticket, stop, take)) Print("Error modyfing position: ",GetLastError());
-#define POS_CLOSE(ticket) if(!m_trade.PositionClose(ticket)) Print("Error closing position, ",GetLastError());
-#define POS_CLOSE_PARTIAL(ticket) if(!m_trade.PositionClosePartial(ticket, partialLots)) Print("Error closing partial position, ",GetLastError());
+#define POS_MODIFY(ticket, stop, take) if(!trade.PositionModify(ticket, stop, take)) Print("Error modyfing position: ",GetLastError());
+#define POS_CLOSE(ticket) if(!trade.PositionClose(ticket)) Print("Error closing position, ",GetLastError());
 
-#define ORD_DELETE(ticket) if (!m_trade.OrderDelete(ticket)) Print("Error deleting order, ",GetLastError());
-#define ORD_MODIFY(ticket, stop, take) if (!m_trade.OrderModify(ticket, ORD_OPEN, stop, take, ORDER_TIME_GTC, 0)) Print("Error modyfing order: ",GetLastError());
+#define ORD_DELETE(ticket) if (!trade.OrderDelete(ticket)) Print("Error deleting order, ",GetLastError());
+#define ORD_MODIFY(ticket, stop, take) if (!trade.OrderModify(ticket, ORD_OPEN, stop, take, ORDER_TIME_GTC, 0)) Print("Error modyfing order: ",GetLastError());
 
-#define TRIM_STRING_LEFT(param) StringTrimLeft(param)
-#define TRIM_STRING_RIGHT(param) StringTrimRight(param)
+double GetLotSize()
+{
+   double lot = AccountInfoDouble(ACCOUNT_BALANCE) / 1000.0;
+   // Ensure lot respects broker min/max requirements
+   double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
 
-CTrade         m_trade;
-CPositionInfo  m_position;
-COrderInfo 		m_order;
+   lot = MathFloor(lot / lotStep) * lotStep; // round to step
+   lot = MathMax(minLot, MathMin(maxLot, lot)); // clamp to min/max
 
-
-#else //__MQL4__
-
-#define POSITION_TYPE_BUY OP_BUY
-#define POSITION_TYPE_SELL OP_SELL
-
-#define POS_TOTAL OrdersTotal()
-#define ORD_TOTAL OrdersTotal()
-#define ASK_PRICE Ask
-#define BID_PRICE Bid
-
-#define POS_SELECT_BY_INDEX(i) if(!OrderSelect(i, SELECT_BY_POS,MODE_TRADES)) continue;
-#define POS_SYMBOL OrderSymbol()
-#define POS_MAGIC OrderMagicNumber()
-#define POS_TYPE OrderType()
-#define POS_OPEN OrderOpenPrice()
-#define POS_STOP OrderStopLoss()
-#define POS_TAKE_PROFIT OrderTakeProfit()
-#define POS_TICKET OrderTicket()
-
-#define ORD_SELECT_BY_INDEX(i) if(!OrderSelect(i, SELECT_BY_POS,MODE_TRADES)) continue;
-#define ORD_SYMBOL OrderSymbol()
-#define ORD_MAGIC OrderMagicNumber()
-#define ORD_TYPE OrderType()
-#define ORD_OPEN OrderOpenPrice()
-#define ORD_STOP OrderStopLoss()
-#define ORD_TAKE_PROFIT OrderTakeProfit()
-#define ORD_TICKET OrderTicket()
-
-#define POS_BUY(lots, price, sl, tp) OrderSend(_Symbol, OP_BUY, lots, price, expertDeviation, sl, tp, trade_comment, expertMagic, 0, clrNONE);
-#define POS_SELL(lots, price, sl, tp) OrderSend(_Symbol, OP_SELL, lots, price, expertDeviation, sl, tp, trade_comment, expertMagic, 0, clrNONE);
-#define ORDER_BUY_LIMIT(lots, price, sl, tp) OrderSend(_Symbol, OP_BUYLIMIT, lots, NormalizeDouble(price,_Digits), expertDeviation, sl, tp, trade_comment, expertMagic, 0, clrNONE);
-#define ORDER_BUY_STOP(lots, price, sl, tp) OrderSend(_Symbol, OP_BUYSTOP, lots, NormalizeDouble(price,_Digits), expertDeviation, sl, tp, trade_comment, expertMagic, 0, clrNONE);
-#define ORDER_SELL_LIMIT(lots, price, sl, tp) OrderSend(_Symbol, OP_SELLLIMIT, lots, NormalizeDouble(price,_Digits), expertDeviation, sl, tp, trade_comment, expertMagic, 0, clrNONE);
-#define ORDER_SELL_STOP(lots, price, sl, tp) OrderSend(_Symbol, OP_SELLSTOP, lots, NormalizeDouble(price,_Digits), expertDeviation, sl, tp, trade_comment, expertMagic, 0, clrNONE);
-#define POS_MODIFY(ticket, stop, take) if (!OrderModify(ticket, POS_OPEN, stop, take, OrderExpiration(), clrNONE)) Print("Error modyfing position: ",GetLastError());
-#define POS_CLOSE(ticket) if(POS_TYPE==POSITION_TYPE_BUY) { if(!OrderClose(ticket,OrderLots(),BID_PRICE,expertDeviation)) Print("Error closing position, ",GetLastError()); } else if(POS_TYPE==POSITION_TYPE_SELL) { if(!OrderClose(ticket,OrderLots(),ASK_PRICE,expertDeviation)) Print("Error closing position, ",GetLastError()); }
-#define POS_CLOSE_PARTIAL(ticket) if(POS_TYPE==POSITION_TYPE_BUY) { if(!OrderClose(ticket,MathMin(partialLots, OrderLots()),BID_PRICE,expertDeviation)) Print("Error closing partial position, ",GetLastError()); } else if(POS_TYPE==POSITION_TYPE_SELL) { if(!OrderClose(ticket,MathMin(partialLots, OrderLots()),ASK_PRICE,expertDeviation)) Print("Error closing partial position, ",GetLastError()); }
-
-#define ORD_DELETE(ticket) if (!OrderDelete(ticket)) Print("Error deleting order, ",GetLastError());
-#define ORD_MODIFY(ticket, stop, take) if (!OrderModify(ticket, ORD_OPEN, stop, take, OrderExpiration(), clrNONE)) Print("Error modyfing order: ",GetLastError());
-
-#define TRIM_STRING_LEFT(param) param=StringTrimLeft(param)
-#define TRIM_STRING_RIGHT(param) param=StringTrimRight(param)
-
-#endif
+   return lot;
+}
 
 //+------------------------------------------------------------------+
 //| defines                                                          |
@@ -186,101 +131,18 @@ COrderInfo 		m_order;
 #define BUTTON_WIDTH                        (100)     // size by X coordinate
 #define BUTTON_HEIGHT                       (25)      // size by Y coordinate
 
-
-#define RISK_LABEL 					"RISK"
-#define STOP_EDIT 					"SL_EDIT"
-#define TAKE_EDIT 					"TP_EDIT"
-#define RISK_EDIT 					"R_EDIT"
-#define BUY_BUTTON 					"BUY"
-#define SELL_BUTTON 					"SELL"
-#define BREAKEVEN_BUTTON 			"SL BREAKEVEN"
-#define CLOSE_BUTTON 				"CLOSE ALL"
-#define CLOSE_BUY_BUTTON 			"CLOSE BUYS"
-#define CLOSE_SELL_BUTTON 			"CLOSE SELLS"
-#define STOP_BUTTON 					"MODIFY SL"
-#define TAKE_BUTTON 					"MODIFY TP"
-#define PARTIAL_EDIT 				"PARTIAL_EDIT"
-#define PARTIAL_BUTTON 				"CLOSE PARTIAL"
-#define COMMENT_EDIT 				"COMM_EDIT"
-#define BUY_PEND_BUTTON 			"PENDING BUY"
-#define SELL_PEND_BUTTON 			"PENDING SELL"
-#define DELETE_BUY_PEND_BUTTON 	"DEL BUY ORD."
-#define DELETE_SELL_PEND_BUTTON 	"DEL SELL ORD."
-
 #define GVAR_POSITION_X		"SimplePanel_positionX"
 #define GVAR_POSITION_Y		"SimplePanel_positionY"
-#define GVAR_RISK_NAME 		"SimplePanel_risk_percent"
-#define GVAR_CALC_TYPE 		"SimplePanel_calc_mode"
-#define GVAR_STOP_LOSS 		"SimplePanel_stop_loss"
-#define GVAR_TAKE_PROFIT 	"SimplePanel_take_profit"
-#define GVAR_PARTIAL_LOTS 	"SimplePanel_partial_close"
-
-//+------------------------------------------------------------------+
-//| Enumerators (for inputs)                                         |
-//+------------------------------------------------------------------+
-enum RiskMode
-{
-   BALANCE_PERCENT, 	//Percentage of balance
-   FIXED_LOTS 			//Fixed lots
-};
-
-enum SLTPMode
-{
-   ST_PRICE, 	//Price
-   ST_DISTANCE //Distance to open price (>0)
-};
-
-enum BidAskMode
-{
-   BA_NORMAL,	//Bid for sell/Ask for buy
-   BA_INVERT,	//Ask for sell/Bid for buy (inv)
-   BA_ONLY_ASK,//Only Ask price
-   BA_ONLY_BID //Only Bid price
-};
 
 //+------------------------------------------------------------------+
 //| Inputs                                                           |
 //+------------------------------------------------------------------+
-#ifdef __MQL5__
 input group "Trade Settings"
-#endif
-input RiskMode riskCalculation = FIXED_LOTS; //Risk calculation mode
-input SLTPMode stop_takeMode = ST_DISTANCE; // SL/TP Mode
-input BidAskMode bidAskReference = BA_NORMAL; //Price reference for SL and TP
 input int expertDeviation = 20; // Maximum slippage
 input int expertMagic = 450913; // Expert Magic number
-input bool affectOtherTrades = false; // Modify external trades (not opened by the panel)
 
-#ifdef __MQL5__
-input group "Buttons"
-#endif
-input bool showBuySellButtons = true; // Show Buy/Sell buttons
-input bool showCloseSepButtons = false; // Show Close Buy/Sell buttons
-input bool showSLBECloseAllButtons = true; // Show SL to BE and Close All buttons
-input bool showModifyButtons = false; // Show Modify SL/TP buttons
-input bool showPartialClose = false; // Show Partial Close
-input bool showPendingOrder = false; // Show Pending Orders
-input bool showDeleteOrder = false; // Show Delete Pending Orders
-input bool showCommentEdit = false; // Show Edit Comment
-
-#ifdef __MQL5__
 input group "Other settings"
-#endif
-input bool grabSLwithDrag = false; //Pick SL values with crosshair drag (Dist. mode)
 input int fontSize = 10; //Font size
-input double autoSetTP = 0.0; //Auto-set TP to SL ratio (0=don't use)
-input bool autoSetSL = true; //Auto-set SL to ratio from TP change
-#ifdef __MQL5__
-input bool asyncOperations = false; //Use asynchronous orders
-#endif
-
-int lot_digits = 2;
-double riskAmount = 2.0;
-double stopLoss = 0.0;
-double takeProfit = 0.0;
-double partialLots = 1.0;
-
-string trade_comment = NULL;
 
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -288,368 +150,242 @@ string trade_comment = NULL;
 class CControlsDialog : public CAppDialog
 {
 private:
-   CLabel            m_label, m_stoploss_label, m_takeprofit_label;
-   CEdit             m_edit, m_stoploss_edit, m_takeprofit_edit;
-   CButton           m_buy_button, m_sell_button, m_breakeven_button, m_close_button, m_modify_sl_button, m_modify_tp_button;
-   CButton				m_close_buys_button, m_close_sell_button, m_buy_order_button, m_sell_order_button, m_delete_buy_button, m_delete_sell_button;
-   CEdit					m_partial_edit;
-   CButton				m_partial_button;
-   CEdit					m_comment_edit;
+   CButton           m_buy_button, m_sell_button, m_close_button;
+   
+   // --- TP/SL UI Elements ---
+   CLabel            m_tp_label, m_sl_label;
+   CButton           m_tp_down_button, m_tp_up_button, m_tp_mode_button;
+   CButton           m_sl_down_button, m_sl_up_button, m_sl_mode_button;
+
+   // --- Stats Labels ---
+   CLabel            m_pos_label, m_spread_label, m_pl_label, m_status_label, m_lot_label, m_hotkey_label;
 
 public:
    //--- create
    virtual bool      Create(const string name);
    //--- chart event handler
    virtual bool      OnEvent(const int id,const long &lparam,const double &dparam,const string &sparam);
-
-   double            GetRiskPercent();
-   double            GetStopLoss();
-   double            GetTakeProfit();
-   double            GetPartialLots();
-
-   void              SetStopLoss(int stop);
+   
+   //--- Update functions
+   void              UpdateTPDisplay(void);
+   void              UpdateSLDisplay(void);
+   void              UpdateDashboard(void);
+   void              FlashButton(string btnName);
+   void              SetStatus(string text, color clr);
 
 protected:
    //--- create dependent controls
-   bool              CreateButton(CButton &button, string name, int x1, int y1, int x2, int y2, color clr_back=clrDarkCyan);
+   bool              CreateButton(CButton &button, string name, int x1, int y1, int x2, int y2, string text, color clr_back=clrDarkCyan, color clr_border=clrBlack, int font_size = 10);
    bool              CreateEdit(CEdit &edit, string name, string editText, int x1, int y1, int x2, int y2);
-   bool              CreateLabel(CLabel &label, string name, int x1, int y1, int x2, int y2);
+   bool              CreateLabel(CLabel &label, string name, int x1, int y1, string text, int font_size = 10, color clr = clrWhite);
+   
    //--- handlers of the dependent controls events
-   void              OnEndEditRisk(void);
-   void              OnEndEditSL(void);
-   void              OnEndEditTP(void);
    void              OnClickBuyButton(void);
    void              OnClickSellButton(void);
-   void              OnClickBreakevenButton(void);
    void              OnClickCloseButton(void);
-   void              OnClickCloseBuyButton(void);
-   void              OnClickCloseSellButton(void);
-   void              OnClickModifySLButton(void);
-   void              OnClickModifyTPButton(void);
-   void              OnEditPartialClose(void);
-   void              OnClickPartialCloseButton(void);
-   void              OnEditComment(void);
-   void              OnClickBuyOrderButton(void);
-   void              OnClickSellOrderButton(void);
-   void              OnClickDeleteBuyOrders(void);
-   void              OnClickDeleteSellOrders(void);
-
-   void              WriteExpertSettings();
-   void              RestoreExpertSettings();
-   void              RestoreStopTakeValues();
-
-   void              RestoreComment();
-   void              SaveComment();
-
-   double            NormalizeLots(double lots);
+   
+   void              OnClickTPUp(void);
+   void              OnClickTPDown(void);
+   void              OnClickTPMode(void);
+   void              OnClickSLUp(void);
+   void              OnClickSLDown(void);
+   void              OnClickSLMode(void);
 };
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
 EVENT_MAP_BEGIN(CControlsDialog)
-ON_EVENT(ON_END_EDIT, m_edit, OnEndEditRisk)
-ON_EVENT(ON_END_EDIT, m_stoploss_edit, OnEndEditSL)
-ON_EVENT(ON_END_EDIT, m_takeprofit_edit, OnEndEditTP)
-if (showBuySellButtons)
-{
    ON_EVENT(ON_CLICK, m_buy_button, OnClickBuyButton)
    ON_EVENT(ON_CLICK, m_sell_button, OnClickSellButton)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showCloseSepButtons)
-{
-   ON_EVENT(ON_CLICK, m_close_buys_button, OnClickCloseBuyButton)
-   ON_EVENT(ON_CLICK, m_close_sell_button, OnClickCloseSellButton)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showSLBECloseAllButtons)
-{
-   ON_EVENT(ON_CLICK, m_breakeven_button, OnClickBreakevenButton)
    ON_EVENT(ON_CLICK, m_close_button, OnClickCloseButton)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showModifyButtons)
-{
-   ON_EVENT(ON_CLICK, m_modify_sl_button, OnClickModifySLButton)
-   ON_EVENT(ON_CLICK, m_modify_tp_button, OnClickModifyTPButton)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showPartialClose)
-{
-   ON_EVENT(ON_END_EDIT, m_partial_edit, OnEditPartialClose)
-   ON_EVENT(ON_CLICK, m_partial_button, OnClickPartialCloseButton)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showCommentEdit)
-{
-   ON_EVENT(ON_END_EDIT, m_comment_edit, OnEditComment)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showPendingOrder)
-{
-   ON_EVENT(ON_CLICK, m_buy_order_button, OnClickBuyOrderButton)
-   ON_EVENT(ON_CLICK, m_sell_order_button, OnClickSellOrderButton)
-}
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-if (showDeleteOrder)
-{
-   ON_EVENT(ON_CLICK, m_delete_buy_button, OnClickDeleteBuyOrders)
-   ON_EVENT(ON_CLICK, m_delete_sell_button, OnClickDeleteSellOrders)
-}
+   
+   ON_EVENT(ON_CLICK, m_tp_up_button, OnClickTPUp)
+   ON_EVENT(ON_CLICK, m_tp_down_button, OnClickTPDown)
+   ON_EVENT(ON_CLICK, m_tp_mode_button, OnClickTPMode)
+   
+   ON_EVENT(ON_CLICK, m_sl_up_button, OnClickSLUp)
+   ON_EVENT(ON_CLICK, m_sl_down_button, OnClickSLDown)
+   ON_EVENT(ON_CLICK, m_sl_mode_button, OnClickSLMode)
 EVENT_MAP_END(CAppDialog)
 
+void CControlsDialog::OnClickTPUp(void) { currentTakeProfit += TP_Step; UpdateTPDisplay(); }
+void CControlsDialog::OnClickTPDown(void) { currentTakeProfit = MathMax(0, currentTakeProfit - TP_Step); UpdateTPDisplay(); }
+void CControlsDialog::OnClickTPMode(void) { tpMode = (tpMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateTPDisplay(); }
+void CControlsDialog::OnClickSLUp(void) { currentStopLoss += SL_Step; UpdateSLDisplay(); }
+void CControlsDialog::OnClickSLDown(void) { currentStopLoss = MathMax(0, currentStopLoss - SL_Step); UpdateSLDisplay(); }
+void CControlsDialog::OnClickSLMode(void) { slMode = (slMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateSLDisplay(); }
+
+void CControlsDialog::UpdateTPDisplay()
+{
+    string currencySymbol = AccountInfoString(ACCOUNT_CURRENCY);
+    string mode = (tpMode == MODE_POINTS) ? "points" : currencySymbol;
+    string value = (tpMode == MODE_POINTS) ? IntegerToString((int)currentTakeProfit) : DoubleToString(currentTakeProfit, 2);
+    m_tp_label.Text("TP: " + value + " " + mode);
+    m_tp_mode_button.Text((tpMode == MODE_POINTS) ? "P" : currencySymbol);
+}
+
+void CControlsDialog::UpdateSLDisplay()
+{
+    string currencySymbol = AccountInfoString(ACCOUNT_CURRENCY);
+    string mode = (slMode == MODE_POINTS) ? "points" : currencySymbol;
+    string value = (slMode == MODE_POINTS) ? IntegerToString((int)currentStopLoss) : DoubleToString(currentStopLoss, 2);
+    m_sl_label.Text("SL: " + value + " " + mode);
+    m_sl_mode_button.Text((slMode == MODE_POINTS) ? "P" : currencySymbol);
+}
+
+void CControlsDialog::UpdateDashboard()
+{
+    int positions = 0;
+    double totalPL = 0;
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
+        {
+            positions++;
+            totalPL += position.Profit();
+        }
+    }
+    
+    double spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point;
+    
+    m_pos_label.Text(StringFormat("POSITIONS: %d", positions));
+    m_pos_label.Color(positions > 0 ? C'255,215,0' : C'0,255,255');
+    
+    m_spread_label.Text(StringFormat("SPREAD: %.1f", spread));
+    color spreadColor = spread <= 2.0 ? C'50,205,50' : (spread <= 5.0 ? C'255,215,0' : C'255,69,0');
+    m_spread_label.Color(spreadColor);
+    
+    dailyPL = GetDailyPL();
+    m_pl_label.Text(StringFormat("DAILY P&L: $%.2f", dailyPL));
+    m_pl_label.Color(dailyPL >= 0 ? C'50,205,50' : C'255,69,0');
+    
+    string status = "READY";
+    color statusColor = C'0,191,255';
+    
+    if(positions > 0)
+    {
+        if(totalPL > 0)
+        {
+            status = "IN PROFIT";
+            statusColor = C'50,205,50';
+        }
+        else if(totalPL < 0)
+        {
+            status = "IN LOSS";
+            statusColor = C'255,69,0';
+        }
+        else
+        {
+            status = "BREAKEVEN";
+            statusColor = C'255,215,0';
+        }
+    }
+    
+    m_status_label.Text(StringFormat("STATUS: %s", status));
+    m_status_label.Color(statusColor);
+    m_lot_label.Text(StringFormat("LOT SIZE: %.2f", GetLotSize()));
+}
+
+void UpdateDashboard()
+{
+    ExtDialog.UpdateDashboard();
+}
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
 bool CControlsDialog::Create(const string name)
 {
-   stopLoss = 0.0;
-   takeProfit = 0.0;
-   partialLots = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   int x = SX(DashX);
+   int y = SY(DashY);
+   int btnW = SX(ButtonSize);
+   int btnH = SY(40);
+   int gap = SX(5);
+   int panelW = (btnW * 3) + (gap * 2) + SX(20);
+   int panelH = SY(280);
 
-   RestoreExpertSettings();
-
-   int rows = 3;
-
-   if (showBuySellButtons) rows++;
-   if (showCloseSepButtons) rows++;
-   if (showSLBECloseAllButtons) rows++;
-   if (showModifyButtons) rows++;
-   if (showPartialClose) rows++;
-   if (showCommentEdit) rows++;
-   if (showPendingOrder) rows++;
-   if (showDeleteOrder) rows++;
-
-   if (rows == 3)
-   {
-      Print("Error: no buttons are being shown");
-      return false;
-   }
-
-//Get position
-   int x1 = 100;
-   int y1 = 40;
-   if (GlobalVariableCheck(GVAR_POSITION_X))
-      x1 = (int)GlobalVariableGet(GVAR_POSITION_X);
-   else
-      GlobalVariableSet(GVAR_POSITION_X, x1);
-
-   if (GlobalVariableCheck(GVAR_POSITION_Y))
-      y1 = (int)GlobalVariableGet(GVAR_POSITION_Y);
-   else
-      GlobalVariableSet(GVAR_POSITION_Y, y1);
-
-
-   int x2 = 8 + x1 + INDENT_LEFT + 2 * BUTTON_WIDTH  + CONTROLS_GAP_X + INDENT_RIGHT;
-   int y2 = 30 + y1 + INDENT_TOP + rows * BUTTON_HEIGHT + (rows - 1) * CONTROLS_GAP_Y + INDENT_BOTTOM;
-
-   if(!CAppDialog::Create(0, name, 1, x1, y1, x2, y2))
+   if(!CAppDialog::Create(0, name, 0, x, y, x + panelW, y + panelH))
       return(false);
-//CaptionFontSize(fontSize); //CUSTOM function defined in CDialog
+   
+   CAppDialog::ColorBackground(C'25,25,45');
+   CAppDialog::ColorBorder(C'100,149,237');
 
-
-   int bx1=INDENT_LEFT;
-   int by1=INDENT_TOP;
-   int bx2=bx1+BUTTON_WIDTH;
-   int by2=by1+BUTTON_HEIGHT;
-
-#define NEXT_COLUMN \
-   	bx1 += (BUTTON_WIDTH+CONTROLS_GAP_X); \
-   	bx2 += (BUTTON_WIDTH+CONTROLS_GAP_X);
-
-#define PREV_COLUMN \
-   	bx1 -= (BUTTON_WIDTH+CONTROLS_GAP_X); \
-   	bx2 -= (BUTTON_WIDTH+CONTROLS_GAP_X);
-
-#define NEXT_ROW \
-   	by1 += (BUTTON_HEIGHT+CONTROLS_GAP_Y); \
-   	by2 += (BUTTON_HEIGHT+CONTROLS_GAP_Y);
-
-
-   if(!CreateLabel(m_label, riskCalculation==BALANCE_PERCENT?"RISK %":"LOTS", bx1+BUTTON_WIDTH/2, by1, bx2, by2))
+   int btnY = INDENT_TOP;
+   int btnX = INDENT_LEFT;
+   
+   if(!CreateButton(m_buy_button, buyBtnName, btnX, btnY, btnX + btnW, btnY + btnH, "▲ BUY", C'34,139,34', C'0,255,0', (int)(14 * UIScale)))
+      return(false);
+   btnX += btnW + gap;
+   if(!CreateButton(m_sell_button, sellBtnName, btnX, btnY, btnX + btnW, btnY + btnH, "▼ SELL", C'220,20,60', C'255,0,100', (int)(14 * UIScale)))
+      return(false);
+   btnX += btnW + gap;
+   if(!CreateButton(m_close_button, closeBtnName, btnX, btnY, btnX + btnW, btnY + btnH, "✕ CLOSE", C'255,140,0', C'255,165,0', (int)(14 * UIScale)))
       return(false);
 
-   NEXT_COLUMN
+   // --- TP/SL UI Elements ---
+   int controlsY = btnY + btnH + SY(15);
+   int smallBtnW = SX(30);
+   int smallBtnH = SY(20);
+    
+   // Take Profit controls
+   int tpY = controlsY + SY(15);
+   if(!CreateLabel(m_tp_label, tpLabel, INDENT_LEFT, tpY, "TP:", (int)(12 * UIScale), C'0,255,255')) return(false);
+   int controlsX = panelW - INDENT_RIGHT - smallBtnW;
+   if(!CreateButton(m_tp_mode_button, tpModeBtn, controlsX, tpY - SY(5), controlsX + SX(40), tpY - SY(5) + smallBtnH, "P", C'70,130,180', C'100,149,237', (int)(10 * UIScale))) return(false);
+   controlsX -= (smallBtnW + gap);
+   if(!CreateButton(m_tp_up_button, tpUpBtn, controlsX, tpY - SY(5), controlsX + smallBtnW, tpY - SY(5) + smallBtnH, "+", C'34,139,34', C'0,255,0', (int)(10 * UIScale))) return(false);
+   controlsX -= (smallBtnW + gap);
+   if(!CreateButton(m_tp_down_button, tpDownBtn, controlsX, tpY - SY(5), controlsX + smallBtnW, tpY - SY(5) + smallBtnH, "-", C'220,20,60', C'255,0,100', (int)(10 * UIScale))) return(false);
 
-   string riskText;
-   if (riskCalculation == BALANCE_PERCENT)
-      riskText = DoubleToString(riskAmount, 2) + " %";
-   else
-      riskText = DoubleToString(riskAmount, lot_digits);
+   // Stop Loss controls
+   int slY = controlsY + SY(45);
+   if(!CreateLabel(m_sl_label, slLabel, INDENT_LEFT, slY, "SL:", (int)(12 * UIScale), C'0,255,255')) return(false);
+   controlsX = panelW - INDENT_RIGHT - smallBtnW;
+   if(!CreateButton(m_sl_mode_button, slModeBtn, controlsX, slY - SY(5), controlsX + SX(40), slY - SY(5) + smallBtnH, "P", C'70,130,180', C'100,149,237', (int)(10 * UIScale))) return(false);
+   controlsX -= (smallBtnW + gap);
+   if(!CreateButton(m_sl_up_button, slUpBtn, controlsX, slY - SY(5), controlsX + smallBtnW, slY - SY(5) + smallBtnH, "+", C'34,139,34', C'0,255,0', (int)(10 * UIScale))) return(false);
+   controlsX -= (smallBtnW + gap);
+   if(!CreateButton(m_sl_down_button, slDownBtn, controlsX, slY - SY(5), controlsX + smallBtnW, slY - SY(5) + smallBtnH, "-", C'220,20,60', C'255,0,100', (int)(10 * UIScale))) return(false);
 
-   if(!CreateEdit(m_edit, RISK_EDIT, riskText, bx1, by1, bx2, by2))
-      return(false);
+   // --- Stats Labels ---
+   int statsY = slY + SY(35);
+   if(!CreateLabel(m_pos_label, posLblName, INDENT_LEFT, statsY, "POSITIONS: 0", (int)(10 * UIScale), C'0,255,255')) return(false);
+   if(!CreateLabel(m_spread_label, spreadLblName, INDENT_LEFT, statsY + SY(20), "SPREAD: 0.0", (int)(10 * UIScale), C'255,215,0')) return(false);
+   if(!CreateLabel(m_pl_label, plLblName, INDENT_LEFT, statsY + SY(40), "DAILY P&L: $0.00", (int)(10 * UIScale), C'50,205,50')) return(false);
+   if(!CreateLabel(m_status_label, statusLblName, INDENT_LEFT, statsY + SY(60), "STATUS: READY", (int)(10 * UIScale), C'0,191,255')) return(false);
+   if(!CreateLabel(m_lot_label, lotLblName, INDENT_LEFT, statsY + SY(80), "LOT SIZE: 0.00", (int)(10 * UIScale), C'176,196,222')) return(false);
 
-   PREV_COLUMN
-   NEXT_ROW
+   // --- Hotkey Label ---
+    if(EnableHotkeys)
+    {
+        string hotkeys = "NUMPAD: [1] BUY  [3] SELL  [2] CLOSE";
+        if(!CreateLabel(m_hotkey_label, prefix + "HOTKEYS", INDENT_LEFT, statsY + SY(110), hotkeys, (int)(8 * UIScale), C'176,196,222')) return(false);
+    }
+   
+   UpdateTPDisplay();
+   UpdateSLDisplay();
 
-   if(!CreateLabel(m_stoploss_label, stop_takeMode==ST_DISTANCE?"SL (points)":"SL (price)", bx1+BUTTON_WIDTH/3, by1, bx2, by2))
-      return(false);
-
-   NEXT_COLUMN
-
-   string sl_edit_str = stop_takeMode==ST_DISTANCE?DoubleToString(stopLoss, 0):DoubleToString(stopLoss, _Digits);
-
-   if(!CreateEdit(m_stoploss_edit, STOP_EDIT, sl_edit_str, bx1, by1, bx2, by2))
-      return(false);
-
-   PREV_COLUMN
-   NEXT_ROW
-
-   if(!CreateLabel(m_takeprofit_label, stop_takeMode==ST_DISTANCE?"TP (points)":"TP (price)", bx1+BUTTON_WIDTH/3, by1, bx2, by2))
-      return(false);
-
-   NEXT_COLUMN
-
-   string tp_edit_str = stop_takeMode==ST_DISTANCE?DoubleToString(takeProfit, 0):DoubleToString(takeProfit, _Digits);
-
-   if(!CreateEdit(m_takeprofit_edit, TAKE_EDIT, tp_edit_str, bx1, by1, bx2, by2))
-      return(false);
-
-   if (showBuySellButtons)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      if(!CreateButton(m_buy_button, BUY_BUTTON, bx1, by1, bx2, by2, clrGreen))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_sell_button, SELL_BUTTON, bx1, by1, bx2, by2, clrRed))
-         return(false);
-   }
-
-
-   if (showCloseSepButtons)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      if(!CreateButton(m_close_buys_button, CLOSE_BUY_BUTTON, bx1, by1, bx2, by2, clrDarkSlateGray))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_close_sell_button, CLOSE_SELL_BUTTON, bx1, by1, bx2, by2, clrDarkRed))
-         return(false);
-   }
-
-   if (showSLBECloseAllButtons)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      if(!CreateButton(m_breakeven_button, BREAKEVEN_BUTTON, bx1, by1, bx2, by2, clrGray))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_close_button, CLOSE_BUTTON, bx1, by1, bx2, by2, clrBlue))
-         return(false);
-   }
-
-   if (showModifyButtons)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      if(!CreateButton(m_modify_sl_button, STOP_BUTTON, bx1, by1, bx2, by2, clrIndianRed))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_modify_tp_button, TAKE_BUTTON, bx1, by1, bx2, by2, clrDarkCyan))
-         return(false);
-   }
-
-   if (showPartialClose)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      string partialEdit = DoubleToString(partialLots, lot_digits);
-      if(!CreateEdit(m_partial_edit, PARTIAL_EDIT, partialEdit, bx1, by1, bx2, by2))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_partial_button, PARTIAL_BUTTON, bx1, by1, bx2, by2, clrSlateBlue))
-         return(false);
-   }
-
-   if (showPendingOrder)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      if(!CreateButton(m_buy_order_button, BUY_PEND_BUTTON, bx1, by1, bx2, by2, clrLimeGreen))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_sell_order_button, SELL_PEND_BUTTON, bx1, by1, bx2, by2, clrOrangeRed))
-         return(false);
-   }
-
-   if (showDeleteOrder)
-   {
-      PREV_COLUMN
-      NEXT_ROW
-
-      if(!CreateButton(m_delete_buy_button, DELETE_BUY_PEND_BUTTON, bx1, by1, bx2, by2, clrDarkGreen))
-         return(false);
-
-      NEXT_COLUMN
-
-      if(!CreateButton(m_delete_sell_button, DELETE_SELL_PEND_BUTTON, bx1, by1, bx2, by2, clrMaroon))
-         return(false);
-   }
-
-   if (showCommentEdit)
-   {
-      bx1 -= (BUTTON_WIDTH+CONTROLS_GAP_X); //Keep bx2 at the end
-      NEXT_ROW
-
-      if(!CreateEdit(m_comment_edit, COMMENT_EDIT, trade_comment, bx1, by1, bx2, by2))
-         return(false);
-   }
-
-//--- succeed
    return(true);
 }
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-bool CControlsDialog::CreateButton(CButton &button, string name,int x1,int y1,int x2,int y2, color clr_back=clrDarkCyan)
+bool CControlsDialog::CreateButton(CButton &button, string name, int x1, int y1, int x2, int y2, string text, color clr_back=clrDarkCyan, color clr_border=clrBlack, int font_size = 10)
 {
 //--- create
    if(!button.Create(m_chart_id, m_name+name, m_subwin, x1, y1, x2, y2))
       return(false);
-   if(!button.Text(name))
+   if(!button.Text(text))
       return(false);
-   if (!button.FontSize(fontSize))
+   if (!button.FontSize(font_size))
       return(false);
-   button.ColorBorder(clrBlack);
+   button.ColorBorder(clr_border);
    button.Color(clrWhite);
    button.ColorBackground(clr_back);
+   button.Font("Arial Bold");
 
    if(!Add(button))
       return(false);
@@ -660,37 +396,6 @@ bool CControlsDialog::CreateButton(CButton &button, string name,int x1,int y1,in
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-double CControlsDialog::GetRiskPercent(void)
-{
-   if (riskCalculation == FIXED_LOTS)
-      return NormalizeLots(StringToDouble(m_edit.Text()));
-   return MathMin(MathMax(StringToDouble(m_edit.Text()), 0.0), 100.0);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-double CControlsDialog::GetStopLoss(void)
-{
-   return MathMax(StringToDouble(m_stoploss_edit.Text()), 0.0);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-double CControlsDialog::GetTakeProfit(void)
-{
-   return MathMax(StringToDouble(m_takeprofit_edit.Text()), 0.0);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-double CControlsDialog::GetPartialLots(void)
-{
-   return NormalizeLots(StringToDouble(m_partial_edit.Text()));
-}
-
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -718,15 +423,17 @@ bool CControlsDialog::CreateEdit(CEdit &edit, string name, string editText, int 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-bool CControlsDialog::CreateLabel(CLabel &label,string name,int x1,int y1,int x2,int y2)
+bool CControlsDialog::CreateLabel(CLabel &label, string name, int x1, int y1, string text, int font_size = 10, color clr = clrWhite)
 {
 //--- create
-   if(!label.Create(m_chart_id,m_name+name,m_subwin,x1,y1,x2,y2))
+   if(!label.Create(m_chart_id, m_name+name, m_subwin, x1, y1, 0, 0))
       return(false);
-   if(!label.Text(name))
+   if(!label.Text(text))
       return(false);
-   if (!label.FontSize(fontSize))
+   if (!label.FontSize(font_size))
       return(false);
+   label.Color(clr);
+   label.Font("Arial");
    if(!Add(label))
       return(false);
 //--- succeed
@@ -738,48 +445,175 @@ bool CControlsDialog::CreateLabel(CLabel &label,string name,int x1,int y1,int x2
 //+------------------------------------------------------------------+
 //| Event handler                                                    |
 //+------------------------------------------------------------------+
+void CControlsDialog::SetStatus(string text, color clr)
+{
+    m_status_label.Text("STATUS: " + text);
+    m_status_label.Color(clr);
+}
+
+bool CanTrade()
+{
+    int pos = 0;
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
+            pos++;
+    }
+    
+    if(pos >= MaxPositions)
+    {
+        ExtDialog.SetStatus("MAX POSITIONS", C'255,215,0');
+        return false;
+    }
+    
+    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+    {
+        ExtDialog.SetStatus("ENABLE AUTO TRADING", C'255,69,0');
+        return false;
+    }
+    
+    if(!MQLInfoInteger(MQL_TRADE_ALLOWED))
+    {
+        ExtDialog.SetStatus("ALLOW DLL IMPORTS", C'255,69,0');
+        return false;
+    }
+    
+    return true;
+}
+
+void ExecuteBuy()
+{
+    if(!CanTrade()) 
+    {
+        Print("Cannot trade - Max positions reached or other restriction");
+        return;
+    }
+    
+    double lot = GetLotSize();
+    double price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    double sl = 0, tp = 0;
+    
+    double sl_points = 0;
+    if(slMode == MODE_POINTS)
+    {
+        sl_points = currentStopLoss;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            sl_points = currentStopLoss / one_point_value;
+        }
+    }
+
+    double tp_points = 0;
+    if(tpMode == MODE_POINTS)
+    {
+        tp_points = currentTakeProfit;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            tp_points = currentTakeProfit / one_point_value;
+        }
+    }
+
+    if(sl_points > 0)
+        sl = price - sl_points * _Point;
+    
+    if(tp_points > 0)
+        tp = price + tp_points * _Point;
+    
+    Print("Attempting BUY: Price=", price, " SL=", sl, " TP=", tp, " Lot=", lot);
+    
+    if(trade.Buy(lot, _Symbol, price, sl, tp, "Dashboard BUY"))
+    {
+        ExtDialog.SetStatus("BUY EXECUTED", C'50,205,50');
+        PlaySound("alert2.wav");
+    }
+    else
+    {
+        Print("Error code: ", trade.ResultRetcode());
+        ExtDialog.SetStatus("BUY FAILED", C'255,69,0');
+    }
+}
+
+void ExecuteSell()
+{
+    if(!CanTrade()) 
+    {
+        Print("Cannot trade - Max positions reached or other restriction");
+        return;
+    }
+    
+    double lot = GetLotSize();
+    double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double sl = 0, tp = 0;
+    
+    double sl_points = 0;
+    if(slMode == MODE_POINTS)
+    {
+        sl_points = currentStopLoss;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            sl_points = currentStopLoss / one_point_value;
+        }
+    }
+
+    double tp_points = 0;
+    if(tpMode == MODE_POINTS)
+    {
+        tp_points = currentTakeProfit;
+    }
+    else // MODE_CURRENCY
+    {
+        double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+        double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+        if(tick_value > 0 && tick_size > 0 && lot > 0)
+        {
+            double one_point_value = (tick_value / tick_size) * _Point * lot;
+            tp_points = currentTakeProfit / one_point_value;
+        }
+    }
+    
+    if(sl_points > 0)
+        sl = price + sl_points * _Point;
+    
+    if(tp_points > 0)
+        tp = price - tp_points * _Point;
+    
+    Print("Attempting SELL: Price=", price, " SL=", sl, " TP=", tp, " Lot=", lot);
+    
+    if(trade.Sell(lot, _Symbol, price, sl, tp, "Dashboard SELL"))
+    {
+        ExtDialog.SetStatus("SELL EXECUTED", C'50,205,50');
+        PlaySound("alert2.wav");
+    }
+    else
+    {
+        Print("Error code: ", trade.ResultRetcode());
+        ExtDialog.SetStatus("SELL FAILED", C'255,69,0');
+    }
+}
+
+
 void CControlsDialog::OnClickBuyButton(void)
 {
    Print("Buy pressed");
-
-   RecalculateValues(POSITION_TYPE_BUY);
-
-   if (!CheckLots()) return;
-
-   double ask = ASK_PRICE;
-
-   double sl = 0.0;
-   double tp = 0.0;
-
-   if (stop_takeMode == ST_PRICE)
-   {
-      sl = stopLoss;
-      tp = takeProfit;
-   }
-   else
-   {
-      double ref = (bidAskReference==BA_NORMAL || bidAskReference==BA_ONLY_ASK)?ask:BID_PRICE;
-
-      if (stopLoss != 0.0)
-         sl = ref - stopLoss  * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      if (takeProfit != 0.0)
-         tp = ref + takeProfit * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   }
-
-   POS_BUY(totalLots, ask, sl, tp)
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickBuyOrderButton(void)
-{
-   Print("Pending Buy pressed");
-
-   setting_buy = true;
-   setting_sell = false;
-
-   CreatePendingSetLine(clrGreen, ASK_PRICE);
+   ExecuteBuy();
 }
 
 //+------------------------------------------------------------------+
@@ -788,90 +622,51 @@ void CControlsDialog::OnClickBuyOrderButton(void)
 void CControlsDialog::OnClickSellButton(void)
 {
    Print("Sell pressed");
-
-   RecalculateValues(POSITION_TYPE_SELL);
-
-   if (!CheckLots()) return;
-
-   double bid = BID_PRICE;
-
-   double sl = 0.0;
-   double tp = 0.0;
-
-   if (stop_takeMode == ST_PRICE)
-   {
-      sl = stopLoss;
-      tp = takeProfit;
-   }
-   else
-   {
-      double ref = (bidAskReference==BA_NORMAL || bidAskReference==BA_ONLY_BID)?bid:ASK_PRICE;
-
-      if (stopLoss !=0.0)
-         sl = ref + stopLoss * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      if (takeProfit != 0.0)
-         tp = ref - takeProfit * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   }
-
-   POS_SELL(totalLots, bid, sl, tp)
+   ExecuteSell();
 }
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void CControlsDialog::OnClickSellOrderButton(void)
+void CloseLastPosition()
 {
-   Print("Pending Sell pressed");
-
-   setting_sell = true;
-   setting_buy = false;
-
-   CreatePendingSetLine(clrRed, BID_PRICE);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickBreakevenButton(void)
-{
-   Print("Breakeven pressed");
-
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         if (POS_TYPE == POSITION_TYPE_BUY)
-         {
-            double bid = BID_PRICE;
-            if (bid <= POS_OPEN)
+    ulong ticket = 0;
+    datetime lastTime = 0;
+    int totalPos = 0;
+    
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
+        {
+            totalPos++;
+            if(position.Time() > lastTime)
             {
-               continue;
+                lastTime = position.Time();
+                ticket = position.Ticket();
             }
-         }
-         else if (POS_TYPE == POSITION_TYPE_SELL)
-         {
-            double ask = ASK_PRICE;
-            if (ask >= POS_OPEN)
-            {
-               continue;
-            }
-         }
-         else
-            continue; //Pending orders
-
-         if (POS_OPEN == POS_STOP)
-         {
-            continue;
-         }
-
-         POS_MODIFY(POS_TICKET, POS_OPEN, POS_TAKE_PROFIT)
-
-      }
-   }
-
+        }
+    }
+    
+    if(ticket > 0)
+    {
+        Print("Attempting to close position: ", ticket);
+        if(trade.PositionClose(ticket))
+        {
+            Print("POSITION CLOSED: ", ticket);
+            ExtDialog.SetStatus("POSITION CLOSED", C'255,215,0');
+            PlaySound("alert2.wav");
+        }
+        else
+        {
+            Print("FAILED TO CLOSE: ", trade.ResultRetcodeDescription());
+            ExtDialog.SetStatus("CLOSE FAILED", C'255,69,0');
+        }
+    }
+    else
+    {
+        Print("NO POSITIONS TO CLOSE");
+        ExtDialog.SetStatus("NO POSITIONS", C'255,215,0');
+    }
 }
 
 //+------------------------------------------------------------------+
@@ -880,403 +675,7 @@ void CControlsDialog::OnClickBreakevenButton(void)
 void CControlsDialog::OnClickCloseButton(void)
 {
    Print("Close pressed");
-
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         POS_CLOSE(POS_TICKET)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickCloseBuyButton(void)
-{
-   Print("Close Buy pressed");
-
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if (POS_TYPE == POSITION_TYPE_SELL) continue;
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         POS_CLOSE(POS_TICKET)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickDeleteBuyOrders(void)
-{
-   Print("Delete Pending Buys pressed");
-
-   for (int j=ORD_TOTAL-1; j>=0; j--)
-   {
-      ORD_SELECT_BY_INDEX(j)
-
-      if (ORD_TYPE != ORDER_TYPE_BUY_LIMIT && ORD_TYPE != ORDER_TYPE_BUY_STOP) continue;
-
-      if (ORD_SYMBOL==_Symbol && (affectOtherTrades || ORD_MAGIC==expertMagic))
-      {
-         ORD_DELETE(ORD_TICKET)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickCloseSellButton(void)
-{
-   Print("Close Sell pressed");
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if (POS_TYPE == POSITION_TYPE_BUY) continue;
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         POS_CLOSE(POS_TICKET)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickDeleteSellOrders(void)
-{
-   Print("Delete Pending Sell pressed");
-
-   for (int j=ORD_TOTAL-1; j>=0; j--)
-   {
-      ORD_SELECT_BY_INDEX(j)
-
-      if (ORD_TYPE != ORDER_TYPE_SELL_LIMIT && ORD_TYPE != ORDER_TYPE_SELL_STOP) continue;
-
-      if (ORD_SYMBOL==_Symbol && (affectOtherTrades || ORD_MAGIC==expertMagic))
-      {
-         ORD_DELETE(ORD_TICKET)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickModifySLButton(void)
-{
-   Print("Modify Stop Loss pressed");
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         double sl = 0.0;
-
-         if (stop_takeMode == ST_PRICE)
-         {
-            sl = stopLoss;
-         }
-         else
-         {
-
-            if (stopLoss !=0.0)
-            {
-               if (POS_TYPE == POSITION_TYPE_BUY) sl = BID_PRICE - stopLoss * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-               else if (POS_TYPE == POSITION_TYPE_SELL) sl = ASK_PRICE + stopLoss * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-               else continue; //Pending orders
-
-            }
-         }
-
-         if (sl != POS_STOP)
-         {
-            POS_MODIFY(POS_TICKET, sl, POS_TAKE_PROFIT)
-         }
-         else
-         {
-            Print("Stop Loss is already " + (string)sl);
-         }
-
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickModifyTPButton(void)
-{
-   Print("Modify Take Profit pressed");
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         double tp = 0.0;
-
-         if (stop_takeMode == ST_PRICE)
-         {
-            tp = takeProfit;
-         }
-         else
-         {
-
-            if (takeProfit !=0.0)
-            {
-               if (POS_TYPE == POSITION_TYPE_BUY) tp = ASK_PRICE + takeProfit * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-               else if (POS_TYPE == POSITION_TYPE_SELL) tp = BID_PRICE - takeProfit * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-               else continue;
-            }
-         }
-
-         if (tp != POS_TAKE_PROFIT)
-         {
-            POS_MODIFY(POS_TICKET, POS_STOP, tp)
-         }
-         else
-         {
-            Print("Take Profit is already " + (string)tp);
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnClickPartialCloseButton(void)
-{
-   Print("Close Partial pressed");
-
-   for(int i = POS_TOTAL-1; i>=0; i--)
-   {
-      POS_SELECT_BY_INDEX(i)
-
-      if(POS_SYMBOL==_Symbol && (affectOtherTrades || POS_MAGIC==expertMagic))
-      {
-         POS_CLOSE_PARTIAL(POS_TICKET)
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnEndEditRisk(void)
-{
-   riskAmount = GetRiskPercent();
-   if (riskCalculation == BALANCE_PERCENT)
-      m_edit.Text(DoubleToString(riskAmount, 2) + " %");
-   else
-      m_edit.Text(DoubleToString(riskAmount, lot_digits));
-   WriteExpertSettings();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnEndEditSL(void)
-{
-   stopLoss = GetStopLoss();
-
-
-   if (stop_takeMode== ST_PRICE)
-      m_stoploss_edit.Text(DoubleToString(stopLoss, _Digits));
-   else
-      m_stoploss_edit.Text(DoubleToString(stopLoss, 0));
-
-   if (autoSetTP>0.0 && stop_takeMode==ST_DISTANCE)
-   {
-      takeProfit = MathRound(stopLoss*autoSetTP);
-      m_takeprofit_edit.Text(DoubleToString(takeProfit,0));
-   }
-
-   WriteExpertSettings();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnEndEditTP(void)
-{
-   takeProfit = GetTakeProfit();
-
-   if (stop_takeMode== ST_PRICE)
-      m_takeprofit_edit.Text(DoubleToString(takeProfit, _Digits));
-   else
-      m_takeprofit_edit.Text(DoubleToString(takeProfit, 0));
-
-   if (autoSetSL && autoSetTP>0.0 && stop_takeMode==ST_DISTANCE)
-   {
-      stopLoss = MathRound(takeProfit/autoSetTP);
-      m_stoploss_edit.Text(DoubleToString(stopLoss,0));
-   }
-
-   WriteExpertSettings();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnEditPartialClose(void)
-{
-   partialLots = GetPartialLots();
-
-   m_partial_edit.Text(DoubleToString(partialLots, lot_digits));
-
-   WriteExpertSettings();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::OnEditComment(void)
-{
-   trade_comment = m_comment_edit.Text();
-   SaveComment();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::RestoreExpertSettings(void)
-{
-   if (showCommentEdit)
-      RestoreComment();
-   else
-      trade_comment=NULL;
-
-   if (GlobalVariableCheck(GVAR_RISK_NAME))
-   {
-      riskAmount = GlobalVariableGet(GVAR_RISK_NAME);
-      if (riskCalculation==FIXED_LOTS)
-         riskAmount = NormalizeLots(riskAmount);
-      partialLots = NormalizeLots(GlobalVariableGet(GVAR_PARTIAL_LOTS));
-
-      RestoreStopTakeValues();
-   }
-   else
-   {
-      WriteExpertSettings();
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::WriteExpertSettings(void)
-{
-   GlobalVariableSet(GVAR_RISK_NAME, riskAmount);
-   GlobalVariableSet(GVAR_CALC_TYPE, stop_takeMode);
-   GlobalVariableSet(GVAR_STOP_LOSS, stopLoss);
-   GlobalVariableSet(GVAR_TAKE_PROFIT, takeProfit);
-   GlobalVariableSet(GVAR_PARTIAL_LOTS, partialLots);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::RestoreStopTakeValues(void)
-{
-   if (GlobalVariableCheck(GVAR_CALC_TYPE))
-   {
-      int typeCalc = (int)GlobalVariableGet(GVAR_CALC_TYPE);
-
-      if (typeCalc == stop_takeMode)
-      {
-         stopLoss = GlobalVariableGet(GVAR_STOP_LOSS);
-         takeProfit = GlobalVariableGet(GVAR_TAKE_PROFIT);
-
-         return;
-      }
-   }
-
-   WriteExpertSettings();
-
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::RestoreComment(void)
-{
-   if (!FileIsExist("SOP_SavedComment.txt"))
-      return;
-
-   int file = FileOpen("SOP_SavedComment.txt", FILE_READ|FILE_TXT|FILE_SHARE_READ);
-
-   if (file==INVALID_HANDLE)
-   {
-      Print("Error reading comment in file");
-      return;
-   }
-   trade_comment = FileReadString(file);
-   FileClose(file);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::SaveComment(void)
-{
-   int file = FileOpen("SOP_SavedComment.txt", FILE_WRITE|FILE_TXT);
-
-   if (file==INVALID_HANDLE)
-   {
-      Print("Error saving comment in file");
-      return;
-   }
-
-   FileWrite(file, trade_comment);
-   FileClose(file);
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-double CControlsDialog::NormalizeLots(double lots)
-{
-   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-   return MathMax(SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN),
-                  MathMin(SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX),
-                          MathFloor(lots / lotStep) * lotStep));
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CControlsDialog::SetStopLoss(int stop)
-{
-   stopLoss = stop;
-   m_stoploss_edit.Text(IntegerToString(stop));
-
-   if (autoSetTP>0.0 && stop_takeMode==ST_DISTANCE)
-   {
-      takeProfit = MathRound(stopLoss*autoSetTP);
-      m_takeprofit_edit.Text(DoubleToString(takeProfit,0));
-   }
-
-   ChartRedraw();
-   WriteExpertSettings();
+   CloseLastPosition();
 }
 
 //+------------------------------------------------------------------+
@@ -1284,41 +683,85 @@ void CControlsDialog::SetStopLoss(int stop)
 //+------------------------------------------------------------------+
 CControlsDialog ExtDialog;
 
-double totalLots;
 MqlRates currentRates[2];
 
-bool is_tracking=false;
-double recorded_price = 0.0;
-
-bool setting_buy=false;
-bool setting_sell=false;
-int xysub;
-double xyprice;
-datetime xytime;
+void UpdateDashboard();
 
 //+------------------------------------------------------------------+
 //| Event handlers                                                   |
 //+------------------------------------------------------------------+
 int OnInitEvent()
 {
-   ObjectsDeleteAll(0, M_NAME); //Remove elements in chart (for template issues)
-   lot_digits = int(-MathLog10(SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP)));
+   trade.SetExpertMagicNumber(expertMagic);
+   trade.SetDeviationInPoints(Slippage);
+   resetTime = TimeCurrent();
+   dailyPL = GetDailyPL();
+    
+   currentTakeProfit = TakeProfit;
+   currentStopLoss = StopLoss;
+    
+   tpDownBtn = prefix + "TP_DOWN";
+   tpUpBtn = prefix + "TP_UP";
+   tpModeBtn = prefix + "TP_MODE";
+   tpLabel = prefix + "TP_LABEL";
+   slDownBtn = prefix + "SL_DOWN";
+   slUpBtn = prefix + "SL_UP";
+   slModeBtn = prefix + "SL_MODE";
+   slLabel = prefix + "SL_LABEL";
 
-   if(!ExtDialog.Create("Simple Panel"))
+   if(!ExtDialog.Create("Scalping Panel"))
       return(INIT_FAILED);
 
    ExtDialog.Run();
 
-#ifdef __MQL5__
-   m_trade.SetExpertMagicNumber(expertMagic);
-   m_trade.SetDeviationInPoints(expertDeviation);
-   if (asyncOperations) m_trade.SetAsyncMode(true);
-#endif
-
-   setting_buy = false;
-   setting_sell = false;
-
    return(INIT_SUCCEEDED);
+}
+
+void OnTick()
+{
+    CheckDailyReset();
+    UpdateDashboard();
+}
+
+double GetDailyPL()
+{
+    double profit = 0;
+    datetime today = StringToTime(TimeToString(TimeCurrent(), TIME_DATE));
+    
+    HistorySelect(today, TimeCurrent());
+    for(int i = 0; i < HistoryDealsTotal(); i++)
+    {
+        ulong ticket = HistoryDealGetTicket(i);
+        if(HistoryDealGetString(ticket, DEAL_SYMBOL) == _Symbol)
+        {
+            profit += HistoryDealGetDouble(ticket, DEAL_PROFIT);
+            profit += HistoryDealGetDouble(ticket, DEAL_SWAP);
+            profit += HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+        }
+    }
+    
+    for(int i = 0; i < PositionsTotal(); i++)
+    {
+        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
+        {
+            profit += position.Profit() + position.Swap() + position.Commission();
+        }
+    }
+    
+    return profit;
+}
+
+void CheckDailyReset()
+{
+    datetime current = TimeCurrent();
+    datetime currentDate = StringToTime(TimeToString(current, TIME_DATE));
+    datetime lastDate = StringToTime(TimeToString(resetTime, TIME_DATE));
+    
+    if(currentDate > lastDate)
+    {
+        resetTime = current;
+        Print("Daily reset");
+    }
 }
 
 //+------------------------------------------------------------------+
@@ -1326,320 +769,76 @@ int OnInitEvent()
 //+------------------------------------------------------------------+
 void OnDeinitEvent(const int reason)
 {
+   // Save panel position
    GlobalVariableSet(GVAR_POSITION_X, ExtDialog.Left());
    GlobalVariableSet(GVAR_POSITION_Y, ExtDialog.Top());
 
-   DeletePendingSetLine();
    Comment("");
    ExtDialog.Destroy(reason);
 }
 
-#define MASK_RIGHT_CLICK 2
-#define MASK_RIGHT_MIDDLE 16
-
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+void CControlsDialog::FlashButton(string btnName)
+{
+    CButton *btn = (CButton*)Control(btnName);
+    if(CheckPointer(btn) == POINTER_INVALID) return;
+    
+    color original_bg_color = btn.ColorBackground();
+    
+    btn.ColorBackground(clrWhite);
+    btn.ColorBorder(C'0,255,0');
+    ChartRedraw();
+    Sleep(150);
+    
+    btn.ColorBackground(original_bg_color);
+    if(StringFind(btnName, "BUY") >= 0) btn.ColorBorder(C'0,255,0');
+    else if(StringFind(btnName, "SELL") >= 0) btn.ColorBorder(C'255,0,100');
+    else if(StringFind(btnName, "CLOSE") >= 0) btn.ColorBorder(C'255,165,0');
+}
+
 void CommonChartEvent(const int id,       // event ID
                       const long& lparam,   	// event parameter of the long type
                       const double& dparam, 	// event parameter of the double type
                       const string& sparam) 	// event parameter of the string type
 {
-   if (setting_buy || setting_sell)
-   {
-      int smask = (int)StringToInteger(sparam);
-
-      if ((id==CHARTEVENT_KEYDOWN && lparam==27) || //ESC
-            (id==CHARTEVENT_MOUSE_MOVE &&
-             ((smask&MASK_RIGHT_CLICK)>0 ||
-              (smask&MASK_RIGHT_MIDDLE)>0)
-            )
-         )
-      {
-         DeletePendingSetLine();
-
-         setting_buy = false;
-         setting_sell = false;
-         return;
-      }
-   }
-   if (setting_buy)
-   {
-      if (id==CHARTEVENT_CLICK)
-      {
-         DeletePendingSetLine();
-
-         ChartXYToTimePrice(ChartID(), (int)lparam, (int)dparam, xysub, xytime, xyprice);
-         OpenBuyPendingOrder(xyprice);
-
-         setting_buy = false;
-         return;
-      }
-      if (id==CHARTEVENT_MOUSE_MOVE)
-      {
-         ChartXYToTimePrice(ChartID(), (int)lparam, (int)dparam, xysub, xytime, xyprice);
-         MovePendingSetLine(xyprice);
-         return;
-      }
-   }
-   if (setting_sell)
-   {
-      if (id==CHARTEVENT_CLICK)
-      {
-         DeletePendingSetLine();
-
-         ChartXYToTimePrice(ChartID(), (int)lparam, (int)dparam, xysub, xytime, xyprice);
-         OpenSellPendingOrder(xyprice);
-
-         setting_sell = false;
-         return;
-      }
-      if (id==CHARTEVENT_MOUSE_MOVE)
-      {
-         ChartXYToTimePrice(ChartID(), (int)lparam, (int)dparam, xysub, xytime, xyprice);
-         MovePendingSetLine(xyprice);
-         return;
-      }
-   }
-
-
-   if (!grabSLwithDrag || stop_takeMode == ST_PRICE)
-      return;
-
-   if (id==CHARTEVENT_CLICK)
-   {
-      if (!is_tracking) return;
-
-      if (!(recorded_price>0.0))
-      {
-         is_tracking=false;
-         return;
-      }
-
-      ChartXYToTimePrice(ChartID(), (int)lparam, (int)dparam, xysub, xytime, xyprice);
-#ifdef __MQL5__
-      int pips = (int)MathRound(MathAbs(xyprice-recorded_price)/SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE));
-#else
-      int pips = (int)(MathAbs(xyprice-recorded_price)/SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE));
-#endif
-
-      if (pips>0)
-         ExtDialog.SetStopLoss(pips);
-
-
-      is_tracking = false;
-      recorded_price = 0.0;
-
-   }
-
-   if (id==CHARTEVENT_MOUSE_MOVE)
-   {
-      if (sparam!="1") return;
-
-      if (is_tracking) return;
-
-      ChartXYToTimePrice(ChartID(), (int)lparam, (int)dparam, xysub, xytime, xyprice);
-
-      if (xysub>0) return;
-
-
-      recorded_price = xyprice;
-      is_tracking = true;
-   }
-
-   if (id==CHARTEVENT_CHART_CHANGE || id==CHARTEVENT_CUSTOM+ON_DRAG_PROCESS) //Stop on drag panel
-   {
-      if (recorded_price>0)
-         recorded_price=0.0;
-   }
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void CreatePendingSetLine(color clr, double line_price)
-{
-   if (ObjectFind(ChartID(), PENDING_SETLINE)<0)
-      ObjectCreate(ChartID(), PENDING_SETLINE, OBJ_HLINE, 0, 0, line_price);
-   ObjectSetInteger(ChartID(), PENDING_SETLINE, OBJPROP_COLOR, clr);
-   ObjectSetInteger(ChartID(), PENDING_SETLINE, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(ChartID(), PENDING_SETLINE, OBJPROP_HIDDEN, false);
-   ObjectSetString(ChartID(), PENDING_SETLINE, OBJPROP_TOOLTIP, "\n");
-
-   ChartRedraw();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void MovePendingSetLine(double line_price)
-{
-   ObjectSetDouble(ChartID(), PENDING_SETLINE, OBJPROP_PRICE, line_price);
-   ChartRedraw();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void DeletePendingSetLine()
-{
-   ObjectDelete(ChartID(), PENDING_SETLINE);
-   ChartRedraw();
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void RecalculateValues(int position, double price_ref=0.0)
-{
-   if (riskCalculation == FIXED_LOTS)
-   {
-      totalLots = riskAmount;
-      return;
-   }
-
-   double riskTotal = AccountInfoDouble(ACCOUNT_BALANCE) * riskAmount / 100.0;
-//Si risk es 0, puede ser por cadena invalida
-
-   double sl = 0.0;
-   if (stop_takeMode == ST_PRICE)
-   {
-      if (stopLoss !=0.0)
-      {
-         if (price_ref>0.0) //pending
-            sl = MathAbs(price_ref-stopLoss);
-         else
-         {
-            if (position == POSITION_TYPE_BUY) sl = ASK_PRICE - stopLoss;
-            else if (position == POSITION_TYPE_SELL) sl = stopLoss - BID_PRICE;
-         }
-      }
-   }
-   else
-   {
-      sl = stopLoss * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   }
-
-	if (sl == 0.0)	
-	{
-	   totalLots = 0.0;
-	   Print("Stop Loss Cannot be 0 with risk percent");
-	   return;
-	}
-	
-	sl  /= SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-	
-	double lotValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE_LOSS);
-	double pointValue = riskTotal / sl;
-	
-	if (pointValue < 0)
-	{
-	   totalLots = 0.0;
-	   Print("Invalid stop");
-	   return;
-	}
-	
-	double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-	
-	totalLots = MathFloor((pointValue / lotValue) / lotStep) * lotStep;
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-bool CheckLots()
-{
-   if (totalLots < SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN))
-   {
-      Print("Risk is too small to Open a trade");
-      return false;
-   }
-   if (totalLots > SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX))
-   {
-      Print("Lots are too big to Open a trade");
-      return false;
-   }
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Pending orders                                                   |
-//+------------------------------------------------------------------+
-void OpenBuyPendingOrder(double order_price)
-{
-   Print("Open Buy pending");
-
-   RecalculateValues(POSITION_TYPE_BUY, order_price);
-
-
-   if (!CheckLots()) return;
-
-
-   double sl = 0.0;
-   double tp = 0.0;
-
-   if (stop_takeMode == ST_PRICE)
-   {
-      sl = stopLoss;
-      tp = takeProfit;
-   }
-   else
-   {
-      if (stopLoss != 0.0)
-         sl = order_price - stopLoss  * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      if (takeProfit != 0.0)
-         tp = order_price + takeProfit * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   }
-
-   if (order_price>ASK_PRICE)
-   {
-      ORDER_BUY_STOP(totalLots, order_price, sl, tp)
-   }
-   else
-   {
-      ORDER_BUY_LIMIT(totalLots, order_price, sl, tp)
-   }
-
-
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void OpenSellPendingOrder(double order_price)
-{
-   Print("Open Sell pending");
-
-   RecalculateValues(POSITION_TYPE_SELL, order_price);
-
-
-   if (!CheckLots()) return;
-
-
-   double sl = 0.0;
-   double tp = 0.0;
-
-   if (stop_takeMode == ST_PRICE)
-   {
-      sl = stopLoss;
-      tp = takeProfit;
-   }
-   else
-   {
-      if (stopLoss != 0.0)
-         sl = order_price + stopLoss  * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      if (takeProfit != 0.0)
-         tp = order_price - takeProfit * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   }
-
-   if (order_price<BID_PRICE)
-   {
-      ORDER_SELL_STOP(totalLots, order_price, sl, tp)
-   }
-   else
-   {
-      ORDER_SELL_LIMIT(totalLots, order_price, sl, tp)
-   }
+    if(id == CHARTEVENT_KEYDOWN && EnableHotkeys)
+    {
+        int keyCode = (int)lparam;
+        string key = "";
+        
+        if(keyCode >= 48 && keyCode <= 57)      
+            key = CharToString((uchar)keyCode);
+        else if(keyCode >= 96 && keyCode <= 105) 
+            key = CharToString((uchar)(keyCode - 48));
+        else
+            key = CharToString((uchar)keyCode);
+        
+        Print("Key pressed: ", key, " (code: ", keyCode, ")");
+        
+        bool isBuyKey = (key == BuyKey) || (keyCode == 49) || (keyCode == 97);   
+        bool isSellKey = (key == SellKey) || (keyCode == 51) || (keyCode == 99);  
+        bool isCloseKey = (key == CloseKey) || (keyCode == 50) || (keyCode == 98); 
+        
+        if(isBuyKey)
+        {
+            ExecuteBuy();
+            ExtDialog.FlashButton(buyBtnName);
+        }
+        else if(isSellKey)
+        {
+            ExecuteSell();
+            ExtDialog.FlashButton(sellBtnName);
+        }
+        else if(isCloseKey)
+        {
+            CloseLastPosition();
+            ExtDialog.FlashButton(closeBtnName);
+        }
+        
+        ChartRedraw();
+    }
 }
 //+------------------------------------------------------------------+
 
