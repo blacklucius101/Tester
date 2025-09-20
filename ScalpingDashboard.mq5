@@ -2,15 +2,9 @@
 #include <Trade\PositionInfo.mqh>
 
 input group "=== TRADING ==="
-input double   LotSize = 1;
 input int      TakeProfit = 50;
 input int      StopLoss = 50;
 input int      Slippage = 3;
-input bool     UseOneTickSL = true;
-
-input group "=== FLAT ==="
-input int      FlatTarget = 1;
-input bool     ShowFlatButton = true;
 
 input group "=== DASHBOARD ==="
 input int      DashX = 30;
@@ -22,11 +16,9 @@ input bool     EnableHotkeys = true;
 input string   BuyKey = "1";
 input string   SellKey = "3"; 
 input string   CloseKey = "2";
-input string   FlatKey = "5";
 
 input group "=== RISK ==="
-input double   MaxDailyLoss = 0;
-input int      MaxPositions = 3;
+input int      MaxPositions = 1;
 
 CTrade trade;
 CPositionInfo position;
@@ -34,18 +26,31 @@ CPositionInfo position;
 string prefix = "FutureDash_";
 double dailyPL = 0;
 datetime resetTime;
-bool flatActive = false;
 
 string buyBtn = prefix + "BUY";
 string sellBtn = prefix + "SELL";
 string closeBtn = prefix + "CLOSE";
-string flatBtn = prefix + "FLAT";
 string posLbl = prefix + "POS";
 string plLbl = prefix + "PL";
 string spreadLbl = prefix + "SPREAD";
 string statusLbl = prefix + "STATUS";
 string mainPanel = prefix + "PANEL";
 string glowPanel = prefix + "GLOW";
+string lotLbl = prefix + "LOT";
+
+double GetLotSize()
+{
+   double lot = AccountInfoDouble(ACCOUNT_BALANCE) / 1000.0;
+   // Ensure lot respects broker min/max requirements
+   double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+
+   lot = MathFloor(lot / lotStep) * lotStep; // round to step
+   lot = MathMax(minLot, MathMin(maxLot, lot)); // clamp to min/max
+
+   return lot;
+}
 
 int OnInit()
 {
@@ -56,14 +61,14 @@ int OnInit()
     
     Print("=== DASHBOARD INITIALIZATION ===");
     Print("Symbol: ", _Symbol);
-    Print("Lot Size: ", LotSize);
+    Print("Lot Size: ", GetLotSize());
     Print("Take Profit: ", TakeProfit);
     Print("Stop Loss: ", StopLoss);
     Print("Magic Number: ", 888888);
     Print("Trading allowed: ", CanTrade() ? "YES" : "NO");
     
     CreateFuturisticDashboard();
-    Print("Click buttons or use NUMPAD: 1=BUY 3=SELL 2=CLOSE 5=FLAT");
+    Print("Click buttons or use NUMPAD: 1=BUY 3=SELL 2=CLOSE");
     return INIT_SUCCEEDED;
 }
 
@@ -76,15 +81,7 @@ void OnDeinit(const int reason)
 void OnTick()
 {
     CheckDailyReset();
-    if(flatActive) CheckFlatSystem();
     UpdateDashboard();
-    
-    if(MaxDailyLoss > 0 && dailyPL <= -MaxDailyLoss)
-    {
-        CloseAllPositions();
-        SetStatus("DAILY LIMIT REACHED", C'255,50,50');
-        return;
-    }
 }
 
 void OnChartEvent(const int id, const long& lparam, const double& dparam, const string& sparam)
@@ -109,12 +106,6 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
             FlashButton(closeBtn, C'255,150,0');
             ObjectSetInteger(0, closeBtn, OBJPROP_STATE, false);
         }
-        else if(sparam == flatBtn && ShowFlatButton)
-        {
-            ToggleFlat();
-            FlashButton(flatBtn, flatActive ? C'0,200,255' : C'100,100,100');
-            ObjectSetInteger(0, flatBtn, OBJPROP_STATE, false);
-        }
         ChartRedraw();
     }
     else if(id == CHARTEVENT_KEYDOWN && EnableHotkeys)
@@ -134,7 +125,6 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
         bool isBuyKey = (key == BuyKey) || (keyCode == 49) || (keyCode == 97);   
         bool isSellKey = (key == SellKey) || (keyCode == 51) || (keyCode == 99);  
         bool isCloseKey = (key == CloseKey) || (keyCode == 50) || (keyCode == 98); 
-        bool isFlatKey = (key == FlatKey) || (keyCode == 53) || (keyCode == 101); 
         
         if(isBuyKey)
         {
@@ -151,11 +141,6 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
             CloseLastPosition();
             FlashButton(closeBtn, C'255,150,0');
         }
-        else if(isFlatKey && ShowFlatButton)
-        {
-            ToggleFlat();
-            FlashButton(flatBtn, flatActive ? C'0,200,255' : C'100,100,100');
-        }
         
         ChartRedraw();
     }
@@ -169,7 +154,7 @@ void CreateFuturisticDashboard()
     int btnH = 50;
     int gap = 8;
     int panelW = (btnW * 2) + gap + 40;
-    int panelH = 280;
+    int panelH = 270;
     
     CreateProPanel(glowPanel, x-20, y-20, panelW+40, panelH+40);
     CreateMainPanel(mainPanel, x-10, y-10, panelW+20, panelH+20);
@@ -184,12 +169,6 @@ void CreateFuturisticDashboard()
     btnY += btnH + gap;
     CreateProButton(closeBtn, x + 10, btnY, btnW, btnH, "✕ CLOSE", C'255,140,0', C'255,165,0', C'0,0,0');
     
-    if(ShowFlatButton)
-        CreateProButton(flatBtn, x + btnW + gap + 10, btnY, btnW, btnH, 
-                       flatActive ? "FLAT ON" : "FLAT OFF", 
-                       flatActive ? C'0,191,255' : C'105,105,105', 
-                       flatActive ? C'135,206,250' : C'169,169,169', C'255,255,255');
-    
     CreateStatsPanel(prefix + "STATS", x + 5, btnY + btnH + 15, panelW - 10, 80);
     
     int statsY = btnY + btnH + 25;
@@ -197,11 +176,12 @@ void CreateFuturisticDashboard()
     CreateStatsLabel(spreadLbl, x + 15, statsY + 20, "SPREAD", "0.0", C'255,215,0');
     CreateStatsLabel(plLbl, x + 15, statsY + 40, "DAILY P&L", "$0.00", C'50,205,50');
     CreateStatsLabel(statusLbl, x + 15, statsY + 60, "STATUS", "READY", C'0,191,255');
+    CreateStatsLabel(lotLbl, x + 15, statsY + 80, "LOT SIZE", DoubleToString(GetLotSize(), 2), C'176,196,222');
     
     if(EnableHotkeys)
     {
         CreateHotkeyPanel(prefix + "HOTKEY_PANEL", x + 5, statsY + 85, panelW - 10, 25);
-        string hotkeys = "NUMPAD: [1] BUY  [3] SELL  [2] CLOSE  [5] FLAT";
+        string hotkeys = "NUMPAD: [1] BUY  [3] SELL  [2] CLOSE";
         CreateHotkeyLabel(prefix + "HOTKEYS", x + 15, statsY + 92, hotkeys, C'176,196,222');
     }
     
@@ -321,7 +301,6 @@ void CreateHotkeyLabel(string name, int x, int y, string text, color clr)
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
     ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
-    ObjectSetString(0, name, OBJPROP_FONT, "Arial");
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
 
@@ -335,11 +314,11 @@ void DeleteAllObjects()
     ObjectDelete(0, buyBtn);
     ObjectDelete(0, sellBtn);
     ObjectDelete(0, closeBtn);
-    if(ShowFlatButton) ObjectDelete(0, flatBtn);
     ObjectDelete(0, posLbl);
     ObjectDelete(0, spreadLbl);
     ObjectDelete(0, plLbl);
     ObjectDelete(0, statusLbl);
+    ObjectDelete(0, lotLbl);
     if(EnableHotkeys)
     {
         ObjectDelete(0, prefix + "HOTKEY_PANEL");
@@ -355,20 +334,19 @@ void ExecuteBuy()
         return;
     }
     
+    double lot = GetLotSize();
     double price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
     double sl = 0, tp = 0;
     
     if(StopLoss > 0)
         sl = price - StopLoss * _Point;
-    else if(UseOneTickSL)
-        sl = price - _Point;
     
     if(TakeProfit > 0)
         tp = price + TakeProfit * _Point;
     
-    Print("Attempting BUY: Price=", price, " SL=", sl, " TP=", tp, " Lot=", LotSize);
+    Print("Attempting BUY: Price=", price, " SL=", sl, " TP=", tp, " Lot=", lot);
     
-    if(trade.Buy(LotSize, _Symbol, price, sl, tp, "Dashboard BUY"))
+    if(trade.Buy(lot, _Symbol, price, sl, tp, "Dashboard BUY"))
     {
         SetStatus("BUY EXECUTED", C'50,205,50');
     }
@@ -387,20 +365,19 @@ void ExecuteSell()
         return;
     }
     
+    double lot = GetLotSize();
     double price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
     double sl = 0, tp = 0;
     
     if(StopLoss > 0)
         sl = price + StopLoss * _Point;
-    else if(UseOneTickSL)
-        sl = price + _Point;
     
     if(TakeProfit > 0)
         tp = price - TakeProfit * _Point;
     
-    Print("Attempting SELL: Price=", price, " SL=", sl, " TP=", tp, " Lot=", LotSize);
+    Print("Attempting SELL: Price=", price, " SL=", sl, " TP=", tp, " Lot=", lot);
     
-    if(trade.Sell(LotSize, _Symbol, price, sl, tp, "Dashboard SELL"))
+    if(trade.Sell(lot, _Symbol, price, sl, tp, "Dashboard SELL"))
     {
         SetStatus("SELL EXECUTED", C'50,205,50');
     }
@@ -448,15 +425,6 @@ void CloseLastPosition()
     {
         Print("NO POSITIONS TO CLOSE");
         SetStatus("NO POSITIONS", C'255,215,0');
-    }
-}
-
-void CloseAllPositions()
-{
-    for(int i = PositionsTotal() - 1; i >= 0; i--)
-    {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
-            trade.PositionClose(position.Ticket());
     }
 }
 
@@ -539,23 +507,9 @@ void UpdateDashboard()
         }
     }
     
-    if(ShowFlatButton)
-    {
-        if(flatActive)
-        {
-            status = "FLAT ACTIVE";
-            ObjectSetString(0, flatBtn, OBJPROP_TEXT, "⚡ FLAT ON");
-            ObjectSetInteger(0, flatBtn, OBJPROP_BGCOLOR, C'0,191,255');
-        }
-        else
-        {
-            ObjectSetString(0, flatBtn, OBJPROP_TEXT, "⚡ FLAT OFF");
-            ObjectSetInteger(0, flatBtn, OBJPROP_BGCOLOR, C'105,105,105');
-        }
-    }
-    
     ObjectSetString(0, statusLbl, OBJPROP_TEXT, StringFormat("STATUS: %s", status));
     ObjectSetInteger(0, statusLbl, OBJPROP_COLOR, statusColor);
+    ObjectSetString(0, lotLbl, OBJPROP_TEXT, StringFormat("LOT SIZE: %.2f", GetLotSize()));
 }
 
 void SetStatus(string text, color clr)
@@ -585,11 +539,6 @@ void FlashButton(string btnName, color flashColor)
     {
         ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, C'255,140,0');
         ObjectSetInteger(0, btnName, OBJPROP_BORDER_COLOR, C'255,165,0');
-    }
-    else if(btnName == flatBtn)
-    {
-        ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, flatActive ? C'0,191,255' : C'105,105,105');
-        ObjectSetInteger(0, btnName, OBJPROP_BORDER_COLOR, flatActive ? C'135,206,250' : C'169,169,169');
     }
 }
 
@@ -631,61 +580,5 @@ void CheckDailyReset()
     {
         resetTime = current;
         Print("Daily reset");
-    }
-}
-
-void ToggleFlat()
-{
-    flatActive = !flatActive;
-    
-    if(flatActive)
-    {
-        Print("FLAT SYSTEM ON - Target: +", FlatTarget, " ticks");
-        SetStatus("FLAT SYSTEM ON", C'0,200,255');
-    }
-    else
-    {
-        Print("FLAT SYSTEM OFF");
-        SetStatus("FLAT SYSTEM OFF", C'100,100,100');
-    }
-}
-
-void CheckFlatSystem()
-{
-    if(!flatActive) return;
-    
-    for(int i = PositionsTotal() - 1; i >= 0; i--)
-    {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
-        {
-            double openPrice = position.PriceOpen();
-            double currentPrice = position.Type() == POSITION_TYPE_BUY ? 
-                                 SymbolInfoDouble(_Symbol, SYMBOL_BID) : 
-                                 SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-            
-            double profitTicks = 0;
-            if(position.Type() == POSITION_TYPE_BUY)
-                profitTicks = (currentPrice - openPrice) / _Point;
-            else
-                profitTicks = (openPrice - currentPrice) / _Point;
-            
-            if(profitTicks >= FlatTarget)
-            {
-                double newSL = 0;
-                if(position.Type() == POSITION_TYPE_BUY)
-                    newSL = openPrice + (FlatTarget * _Point);
-                else
-                    newSL = openPrice - (FlatTarget * _Point);
-                
-                if(MathAbs(position.StopLoss() - newSL) > _Point/2)
-                {
-                    if(trade.PositionModify(position.Ticket(), newSL, position.TakeProfit()))
-                    {
-                        Print("FLAT: Profit locked at +", FlatTarget, " ticks");
-                        SetStatus("PROFIT LOCKED", C'255,255,0');
-                    }
-                }
-            }
-        }
     }
 }
