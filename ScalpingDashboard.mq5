@@ -9,6 +9,7 @@ input int      SL_Step = 1;
 input int      Slippage = 3;
 
 input group "=== DASHBOARD ==="
+input double UIScale = 1.0;  // User adjustable scale factor
 input int      DashX = 30;
 input int      DashY = 30;
 input int      ButtonSize = 90;
