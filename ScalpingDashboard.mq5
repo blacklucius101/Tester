@@ -14,6 +14,9 @@ input int      DashX = 30;
 input int      DashY = 30;
 input int      ButtonSize = 90;
 
+#define SX(v) (int)(v * UIScale)
+#define SY(v) (int)(v * UIScale)
+
 input group "=== KEYBOARD HOTKEYS ==="
 input bool     EnableHotkeys = true;
 input string   BuyKey = "1";
@@ -216,7 +219,7 @@ void CreateProButtonSmall(string name, int x, int y, int w, int h, string text, 
     ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
     ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
     ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, hover);
-    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, (int)(10 * UIScale));
     ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
@@ -224,19 +227,19 @@ void CreateProButtonSmall(string name, int x, int y, int w, int h, string text, 
 
 void CreateFuturisticDashboard()
 {
-    int x = DashX;
-    int y = DashY;
-    int btnW = ButtonSize;
-    int btnH = 40;
-    int gap = 5;
-    int panelW = (btnW * 3) + (gap * 2) + 20;
-    int panelH = 280;
+    int x = SX(DashX);
+    int y = SY(DashY);
+    int btnW = SX(ButtonSize);
+    int btnH = SY(40);
+    int gap = SX(5);
+    int panelW = (btnW * 3) + (gap * 2) + SX(20);
+    int panelH = SY(280);
     
-    CreateProPanel(glowPanel, x-20, y-20, panelW+40, panelH+40);
-    CreateMainPanel(mainPanel, x-10, y-10, panelW+20, panelH+20);
+    CreateProPanel(glowPanel, x - SX(20), y - SY(20), panelW + SX(40), panelH + SY(40));
+    CreateMainPanel(mainPanel, x - SX(10), y - SY(10), panelW + SX(20), panelH + SY(20));
     
-    int btnY = y + 10;
-    int btnX = x + 10;
+    int btnY = y + SY(10);
+    int btnX = x + SX(10);
     CreateProButton(buyBtn, btnX, btnY, btnW, btnH, "▲ BUY", C'34,139,34', C'0,255,0', C'255,255,255');
     btnX += btnW + gap;
     CreateProButton(sellBtn, btnX, btnY, btnW, btnH, "▼ SELL", C'220,20,60', C'255,0,100', C'255,255,255');
@@ -244,44 +247,44 @@ void CreateFuturisticDashboard()
     CreateProButton(closeBtn, btnX, btnY, btnW, btnH, "✕ CLOSE", C'255,140,0', C'255,165,0', C'0,0,0');
     
     // --- TP/SL UI Elements ---
-    int controlsY = btnY + btnH + 15;
-    CreateStatsPanel(prefix + "TP_PANEL", x + 5, controlsY, panelW - 10, 80);
+    int controlsY = btnY + btnH + SY(15);
+    CreateStatsPanel(prefix + "TP_PANEL", x + SX(5), controlsY, panelW - SX(10), SY(80));
     
-    int smallBtnW = 30;
-    int smallBtnH = 20;
+    int smallBtnW = SX(30);
+    int smallBtnH = SY(20);
     
     // Take Profit controls
-    int tpY = controlsY + 15;
-    CreateHeaderLabel(tpLabel, x + 15, tpY, "TP:", C'0,255,255');
-    CreateProButtonSmall(tpDownBtn, x + 170, tpY - 5, smallBtnW, smallBtnH, "-", C'220,20,60', C'255,0,100', C'255,255,255');
-    CreateProButtonSmall(tpUpBtn, x + 210, tpY - 5, smallBtnW, smallBtnH, "+", C'34,139,34', C'0,255,0', C'255,255,255');
-    CreateProButtonSmall(tpModeBtn, x + 250, tpY - 5, 40, smallBtnH, "P", C'70,130,180', C'100,149,237', C'255,255,255');
+    int tpY = controlsY + SY(15);
+    CreateHeaderLabel(tpLabel, x + SX(15), tpY, "TP:", C'0,255,255');
+    CreateProButtonSmall(tpDownBtn, x + SX(170), tpY - SY(5), smallBtnW, smallBtnH, "-", C'220,20,60', C'255,0,100', C'255,255,255');
+    CreateProButtonSmall(tpUpBtn, x + SX(210), tpY - SY(5), smallBtnW, smallBtnH, "+", C'34,139,34', C'0,255,0', C'255,255,255');
+    CreateProButtonSmall(tpModeBtn, x + SX(250), tpY - SY(5), SX(40), smallBtnH, "P", C'70,130,180', C'100,149,237', C'255,255,255');
 
     // Stop Loss controls
-    int slY = controlsY + 45;
-    CreateHeaderLabel(slLabel, x + 15, slY, "SL:", C'0,255,255');
-    CreateProButtonSmall(slDownBtn, x + 170, slY - 5, smallBtnW, smallBtnH, "-", C'220,20,60', C'255,0,100', C'255,255,255');
-    CreateProButtonSmall(slUpBtn, x + 210, slY - 5, smallBtnW, smallBtnH, "+", C'34,139,34', C'0,255,0', C'255,255,255');
-    CreateProButtonSmall(slModeBtn, x + 250, slY - 5, 40, smallBtnH, "P", C'70,130,180', C'100,149,237', C'255,255,255');
+    int slY = controlsY + SY(45);
+    CreateHeaderLabel(slLabel, x + SX(15), slY, "SL:", C'0,255,255');
+    CreateProButtonSmall(slDownBtn, x + SX(170), slY - SY(5), smallBtnW, smallBtnH, "-", C'220,20,60', C'255,0,100', C'255,255,255');
+    CreateProButtonSmall(slUpBtn, x + SX(210), slY - SY(5), smallBtnW, smallBtnH, "+", C'34,139,34', C'0,255,0', C'255,255,255');
+    CreateProButtonSmall(slModeBtn, x + SX(250), slY - SY(5), SX(40), smallBtnH, "P", C'70,130,180', C'100,149,237', C'255,255,255');
 
     UpdateTPDisplay();
     UpdateSLDisplay();
     // --- END TP/SL UI Elements ---
 
-    CreateStatsPanel(prefix + "STATS", x + 5, slY + 25, panelW - 10, 115);
+    CreateStatsPanel(prefix + "STATS", x + SX(5), slY + SY(25), panelW - SX(10), SY(115));
     
-    int statsY = slY + 35;
-    CreateStatsLabel(posLbl, x + 15, statsY, "POSITIONS", "0", C'0,255,255');
-    CreateStatsLabel(spreadLbl, x + 15, statsY + 20, "SPREAD", "0.0", C'255,215,0');
-    CreateStatsLabel(plLbl, x + 15, statsY + 40, "DAILY P&L", "$0.00", C'50,205,50');
-    CreateStatsLabel(statusLbl, x + 15, statsY + 60, "STATUS", "READY", C'0,191,255');
-    CreateStatsLabel(lotLbl, x + 15, statsY + 80, "LOT SIZE", DoubleToString(GetLotSize(), 2), C'176,196,222');
+    int statsY = slY + SY(35);
+    CreateStatsLabel(posLbl, x + SX(15), statsY, "POSITIONS", "0", C'0,255,255');
+    CreateStatsLabel(spreadLbl, x + SX(15), statsY + SY(20), "SPREAD", "0.0", C'255,215,0');
+    CreateStatsLabel(plLbl, x + SX(15), statsY + SY(40), "DAILY P&L", "$0.00", C'50,205,50');
+    CreateStatsLabel(statusLbl, x + SX(15), statsY + SY(60), "STATUS", "READY", C'0,191,255');
+    CreateStatsLabel(lotLbl, x + SX(15), statsY + SY(80), "LOT SIZE", DoubleToString(GetLotSize(), 2), C'176,196,222');
     
     if(EnableHotkeys)
     {
-        CreateHotkeyPanel(prefix + "HOTKEY_PANEL", x + 5, statsY + 105, panelW - 10, 25);
+        CreateHotkeyPanel(prefix + "HOTKEY_PANEL", x + SX(5), statsY + SY(105), panelW - SX(10), SY(25));
         string hotkeys = "NUMPAD: [1] BUY  [3] SELL  [2] CLOSE";
-        CreateHotkeyLabel(prefix + "HOTKEYS", x + 15, statsY + 110, hotkeys, C'176,196,222');
+        CreateHotkeyLabel(prefix + "HOTKEYS", x + SX(15), statsY + SY(110), hotkeys, C'176,196,222');
     }
     
     ChartRedraw();
@@ -363,7 +366,7 @@ void CreateProButton(string name, int x, int y, int w, int h, string text, color
     ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
     ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
     ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, hover);
-    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 14);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, (int)(14 * UIScale));
     ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
@@ -375,7 +378,7 @@ void CreateHeaderLabel(string name, int x, int y, string text, color clr)
     ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
-    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 12);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, (int)(12 * UIScale));
     ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
@@ -387,7 +390,7 @@ void CreateStatsLabel(string name, int x, int y, string label, string value, col
     ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
     ObjectSetString(0, name, OBJPROP_TEXT, label + ": " + value);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
-    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, (int)(10 * UIScale));
     ObjectSetString(0, name, OBJPROP_FONT, "Arial");
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
@@ -399,7 +402,7 @@ void CreateHotkeyLabel(string name, int x, int y, string text, color clr)
     ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
-    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, (int)(8 * UIScale));
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
 
@@ -491,6 +494,7 @@ void ExecuteBuy()
     if(trade.Buy(lot, _Symbol, price, sl, tp, "Dashboard BUY"))
     {
         SetStatus("BUY EXECUTED", C'50,205,50');
+        PlaySound("alert2.wav");
     }
     else
     {
@@ -554,6 +558,7 @@ void ExecuteSell()
     if(trade.Sell(lot, _Symbol, price, sl, tp, "Dashboard SELL"))
     {
         SetStatus("SELL EXECUTED", C'50,205,50');
+        PlaySound("alert2.wav");
     }
     else
     {
@@ -588,6 +593,7 @@ void CloseLastPosition()
         {
             Print("POSITION CLOSED: ", ticket);
             SetStatus("POSITION CLOSED", C'255,215,0');
+            PlaySound("alert2.wav");
         }
         else
         {
