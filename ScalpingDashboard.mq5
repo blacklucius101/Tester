@@ -11,7 +11,7 @@ input int      Slippage = 3;
 input group "=== DASHBOARD ==="
 input int      DashX = 30;
 input int      DashY = 30;
-input int      ButtonSize = 140;
+input int      ButtonSize = 90;
 
 input group "=== KEYBOARD HOTKEYS ==="
 input bool     EnableHotkeys = true;
@@ -226,10 +226,10 @@ void CreateFuturisticDashboard()
     int x = DashX;
     int y = DashY;
     int btnW = ButtonSize;
-    int btnH = 50;
-    int gap = 8;
-    int panelW = (btnW * 2) + gap + 40;
-    int panelH = 370; // Increased panel height
+    int btnH = 40;
+    int gap = 5;
+    int panelW = (btnW * 3) + (gap * 2) + 20;
+    int panelH = 300;
     
     CreateProPanel(glowPanel, x-20, y-20, panelW+40, panelH+40);
     CreateMainPanel(mainPanel, x-10, y-10, panelW+20, panelH+20);
@@ -238,11 +238,12 @@ void CreateFuturisticDashboard()
     CreateHeaderLabel(prefix + "TITLE", x + panelW/2 - 60, y + 8, "SCALPING", C'0,255,255');
     
     int btnY = y + 50;
-    CreateProButton(buyBtn, x + 10, btnY, btnW, btnH, "▲ BUY", C'34,139,34', C'0,255,0', C'255,255,255');
-    CreateProButton(sellBtn, x + btnW + gap + 10, btnY, btnW, btnH, "▼ SELL", C'220,20,60', C'255,0,100', C'255,255,255');
-    
-    btnY += btnH + gap;
-    CreateProButton(closeBtn, x + 10, btnY, btnW, btnH, "✕ CLOSE", C'255,140,0', C'255,165,0', C'0,0,0');
+    int btnX = x + 10;
+    CreateProButton(buyBtn, btnX, btnY, btnW, btnH, "▲ BUY", C'34,139,34', C'0,255,0', C'255,255,255');
+    btnX += btnW + gap;
+    CreateProButton(sellBtn, btnX, btnY, btnW, btnH, "▼ SELL", C'220,20,60', C'255,0,100', C'255,255,255');
+    btnX += btnW + gap;
+    CreateProButton(closeBtn, btnX, btnY, btnW, btnH, "✕ CLOSE", C'255,140,0', C'255,165,0', C'0,0,0');
     
     // --- TP/SL UI Elements ---
     int controlsY = btnY + btnH + 15;
