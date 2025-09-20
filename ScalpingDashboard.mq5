@@ -4,6 +4,8 @@
 input group "=== TRADING ==="
 input int      TakeProfit = 50;
 input int      StopLoss = 50;
+input int      TP_Step = 1;
+input int      SL_Step = 1;
 input int      Slippage = 3;
 
 input group "=== DASHBOARD ==="
@@ -137,11 +139,11 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
             ObjectSetInteger(0, closeBtn, OBJPROP_STATE, false);
         }
         // --- TP/SL UI Events ---
-        else if(sparam == tpUpBtn) { currentTakeProfit++; UpdateTPDisplay(); }
-        else if(sparam == tpDownBtn) { if(currentTakeProfit > 0) currentTakeProfit--; UpdateTPDisplay(); }
+        else if(sparam == tpUpBtn) { currentTakeProfit += TP_Step; UpdateTPDisplay(); }
+        else if(sparam == tpDownBtn) { currentTakeProfit = MathMax(0, currentTakeProfit - TP_Step); UpdateTPDisplay(); }
         else if(sparam == tpModeBtn) { tpMode = (tpMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateTPDisplay(); }
-        else if(sparam == slUpBtn) { currentStopLoss++; UpdateSLDisplay(); }
-        else if(sparam == slDownBtn) { if(currentStopLoss > 0) currentStopLoss--; UpdateSLDisplay(); }
+        else if(sparam == slUpBtn) { currentStopLoss += SL_Step; UpdateSLDisplay(); }
+        else if(sparam == slDownBtn) { currentStopLoss = MathMax(0, currentStopLoss - SL_Step); UpdateSLDisplay(); }
         else if(sparam == slModeBtn) { slMode = (slMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateSLDisplay(); }
         // --- END TP/SL UI Events ---
         ChartRedraw();
