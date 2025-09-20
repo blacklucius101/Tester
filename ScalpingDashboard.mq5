@@ -229,15 +229,12 @@ void CreateFuturisticDashboard()
     int btnH = 40;
     int gap = 5;
     int panelW = (btnW * 3) + (gap * 2) + 20;
-    int panelH = 300;
+    int panelH = 280;
     
     CreateProPanel(glowPanel, x-20, y-20, panelW+40, panelH+40);
     CreateMainPanel(mainPanel, x-10, y-10, panelW+20, panelH+20);
-    CreateHeaderPanel(prefix + "HEADER", x, y, panelW, 35);
     
-    CreateHeaderLabel(prefix + "TITLE", x + panelW/2 - 60, y + 8, "SCALPING", C'0,255,255');
-    
-    int btnY = y + 50;
+    int btnY = y + 10;
     int btnX = x + 10;
     CreateProButton(buyBtn, btnX, btnY, btnW, btnH, "▲ BUY", C'34,139,34', C'0,255,0', C'255,255,255');
     btnX += btnW + gap;
@@ -247,7 +244,7 @@ void CreateFuturisticDashboard()
     
     // --- TP/SL UI Elements ---
     int controlsY = btnY + btnH + 15;
-    CreateStatsPanel(prefix + "TP_PANEL", x + 5, controlsY, panelW - 10, 50);
+    CreateStatsPanel(prefix + "TP_PANEL", x + 5, controlsY, panelW - 10, 80);
     
     int smallBtnW = 30;
     int smallBtnH = 20;
@@ -270,7 +267,7 @@ void CreateFuturisticDashboard()
     UpdateSLDisplay();
     // --- END TP/SL UI Elements ---
 
-    CreateStatsPanel(prefix + "STATS", x + 5, slY + 25, panelW - 10, 80);
+    CreateStatsPanel(prefix + "STATS", x + 5, slY + 25, panelW - 10, 115);
     
     int statsY = slY + 35;
     CreateStatsLabel(posLbl, x + 15, statsY, "POSITIONS", "0", C'0,255,255');
@@ -281,9 +278,9 @@ void CreateFuturisticDashboard()
     
     if(EnableHotkeys)
     {
-        CreateHotkeyPanel(prefix + "HOTKEY_PANEL", x + 5, statsY + 85, panelW - 10, 25);
+        CreateHotkeyPanel(prefix + "HOTKEY_PANEL", x + 5, statsY + 105, panelW - 10, 25);
         string hotkeys = "NUMPAD: [1] BUY  [3] SELL  [2] CLOSE";
-        CreateHotkeyLabel(prefix + "HOTKEYS", x + 15, statsY + 92, hotkeys, C'176,196,222');
+        CreateHotkeyLabel(prefix + "HOTKEYS", x + 15, statsY + 110, hotkeys, C'176,196,222');
     }
     
     ChartRedraw();
@@ -409,8 +406,6 @@ void DeleteAllObjects()
 {
     ObjectDelete(0, glowPanel);
     ObjectDelete(0, mainPanel);
-    ObjectDelete(0, prefix + "HEADER");
-    ObjectDelete(0, prefix + "TITLE");
     ObjectDelete(0, prefix + "STATS");
     ObjectDelete(0, buyBtn);
     ObjectDelete(0, sellBtn);
