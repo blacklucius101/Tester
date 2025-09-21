@@ -2,11 +2,11 @@
 #include <Trade\PositionInfo.mqh>
 
 input group "=== TRADING ==="
-input int      TakeProfit = 0.3;
-input int      StopLoss = 5;
-input int      TP_Step = 0.1;
+input int      TakeProfit = 50;
+input int      StopLoss = 50;
+input int      TP_Step = 1;
 input int      SL_Step = 1;
-input int      Slippage = 100;
+input int      Slippage = 3;
 
 input group "=== DASHBOARD ==="
 input double UIScale = 1.0;  // User adjustable scale factor
