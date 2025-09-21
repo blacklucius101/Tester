@@ -2,11 +2,11 @@
 #include <Trade\PositionInfo.mqh>
 
 input group "=== TRADING ==="
-input int      TakeProfit = 50;
-input int      StopLoss = 50;
-input int      TP_Step = 1;
+input int      TakeProfit = 0.3;
+input int      StopLoss = 5;
+input int      TP_Step = 0.1;
 input int      SL_Step = 1;
-input int      Slippage = 3;
+input int      Slippage = 100;
 
 input group "=== DASHBOARD ==="
 input double UIScale = 1.0;  // User adjustable scale factor
@@ -59,6 +59,14 @@ string statusLbl = prefix + "STATUS";
 string mainPanel = prefix + "PANEL";
 string glowPanel = prefix + "GLOW";
 string lotLbl = prefix + "LOT";
+
+// --- UI State & Elements ---
+bool isMinimized = false;
+string minimizeBtn = prefix + "MINIMIZE";
+string maximizeBtn = prefix + "MAXIMIZE";
+string closeIconBtn = prefix + "CLOSE_ICON";
+string minimizedPanel = prefix + "MINIMIZED_PANEL";
+// --- END UI State & Elements ---
 
 double GetLotSize()
 {
@@ -117,7 +125,39 @@ void OnDeinit(const int reason)
 void OnTick()
 {
     CheckDailyReset();
-    UpdateDashboard();
+    if(!isMinimized)
+    {
+        UpdateDashboard();
+    }
+}
+
+void MinimizeDashboard()
+{
+    DeleteAllObjects();
+    isMinimized = true;
+
+    int x = SX(DashX);
+    int y = SY(DashY);
+    int panelW = SX(60);
+    int panelH = SY(25);
+
+    CreateMainPanel(minimizedPanel, x - SX(10), y - SY(10), panelW, panelH);
+
+    int iconBtnSize = SX(20);
+    int iconBtnY = y - SY(8);
+    int iconBtnX = x + panelW - iconBtnSize - SX(15);
+    
+    CreateIconButton(closeIconBtn, iconBtnX, iconBtnY, iconBtnSize, iconBtnSize, "x", C'25,25,45', C'255,0,0', C'255,255,255');
+    CreateIconButton(maximizeBtn, iconBtnX - iconBtnSize - SX(2), iconBtnY, iconBtnSize, iconBtnSize, "y", C'25,25,45', C'100,149,237', C'255,255,255');
+    
+    ChartRedraw();
+}
+
+void MaximizeDashboard()
+{
+    DeleteAllObjects();
+    isMinimized = false;
+    CreateFuturisticDashboard();
 }
 
 void OnChartEvent(const int id, const long& lparam, const double& dparam, const string& sparam)
@@ -150,6 +190,18 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
         else if(sparam == slDownBtn) { currentStopLoss = MathMax(0, currentStopLoss - SL_Step); UpdateSLDisplay(); }
         else if(sparam == slModeBtn) { slMode = (slMode == MODE_POINTS) ? MODE_CURRENCY : MODE_POINTS; UpdateSLDisplay(); }
         // --- END TP/SL UI Events ---
+        else if(sparam == minimizeBtn)
+        {
+            MinimizeDashboard();
+        }
+        else if(sparam == maximizeBtn)
+        {
+            MaximizeDashboard();
+        }
+        else if(sparam == closeIconBtn)
+        {
+            ExpertRemove();
+        }
         ChartRedraw();
     }
     else if(id == CHARTEVENT_KEYDOWN && EnableHotkeys)
@@ -224,6 +276,22 @@ void CreateProButtonSmall(string name, int x, int y, int w, int h, string text, 
     ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
 
+void CreateIconButton(string name, int x, int y, int w, int h, string text, color bg, color hover, color textColor)
+{
+    ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+    ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+    ObjectSetString(0, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
+    ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+    ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, hover);
+    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, (int)(10 * UIScale));
+    ObjectSetString(0, name, OBJPROP_FONT, "Wingdings");
+    ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+}
+
 
 void CreateFuturisticDashboard()
 {
@@ -287,6 +355,15 @@ void CreateFuturisticDashboard()
         CreateHotkeyLabel(prefix + "HOTKEYS", x + SX(15), statsY + SY(110), hotkeys, C'176,196,222');
     }
     
+    // --- Window Control Buttons ---
+    int iconBtnSize = SX(20);
+    int iconBtnY = y - SY(15);
+    int iconBtnX = x + panelW - iconBtnSize + SX(10);
+    
+    CreateIconButton(closeIconBtn, iconBtnX, iconBtnY, iconBtnSize, iconBtnSize, "x", C'25,25,45', C'255,0,0', C'255,255,255');
+    CreateIconButton(minimizeBtn, iconBtnX - iconBtnSize - SX(2), iconBtnY, iconBtnSize, iconBtnSize, ";", C'25,25,45', C'100,149,237', C'255,255,255');
+    // --- END Window Control Buttons ---
+
     ChartRedraw();
 }
 
@@ -410,6 +487,7 @@ void DeleteAllObjects()
 {
     ObjectDelete(0, glowPanel);
     ObjectDelete(0, mainPanel);
+    ObjectDelete(0, minimizedPanel);
     ObjectDelete(0, prefix + "STATS");
     ObjectDelete(0, buyBtn);
     ObjectDelete(0, sellBtn);
@@ -437,6 +515,10 @@ void DeleteAllObjects()
         ObjectDelete(0, prefix + "HOTKEY_PANEL");
         ObjectDelete(0, prefix + "HOTKEYS");
     }
+    
+    ObjectDelete(0, minimizeBtn);
+    ObjectDelete(0, maximizeBtn);
+    ObjectDelete(0, closeIconBtn);
 }
 
 void ExecuteBuy()
