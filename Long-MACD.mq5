@@ -10,20 +10,29 @@
 
 //--- indicator settings
 #property indicator_separate_window
-#property indicator_buffers 5
-#property indicator_plots   2
+#property indicator_buffers 6
+#property indicator_plots   3
+
+//--- MACD Histogram plot
 #property indicator_color1  clrDarkGray,clrDeepSkyBlue,clrDarkOrange,clrGreen,clrLime,clrOrange,clrCrimson
 #property indicator_width1  2
-#property indicator_color2  clrRed
+#property indicator_label1  "MACD"
+
+//--- MACD Line plot
+#property indicator_color2  clrBlue
 #property indicator_width2  1
-#property indicator_label2  "Signal"
+#property indicator_label2  "MACD Line"
+
+//--- Signal Line plot
+#property indicator_color3  clrRed
+#property indicator_width3  1
+#property indicator_label3  "Signal"
 
 //--- input parameters
 input int                InpFastEMA=12;               // Fast EMA period
 input int                InpSlowEMA=26;               // Slow EMA period
 input int                InpSignalSMA=9;              // Signal SMA period
 input ENUM_APPLIED_PRICE InpAppliedPrice=PRICE_CLOSE; // Applied price
-input bool               ShowAsHistogram=false;       // Show as histogram
 input int                LabelShiftX = 150;           // Label X position
 input int                LabelShiftY = 15;            // Label Y position
 input string             LabelFont = "Arial";         // Label font
@@ -33,6 +42,7 @@ input color              LabelBgColor = clrGray;      // Label background color
 
 //--- indicator buffers
 double MACDLineBuffer[];
+double MACDLineBorderBuffer[];
 double ColorBuffer[];
 double ExtSignalBuffer[];
 double ExtFastMaBuffer[];
@@ -50,32 +60,26 @@ datetime lastUpdateTime = 0;
 //+------------------------------------------------------------------+
 void OnInit()
   {
-//--- Set plot properties based on ShowAsHistogram input
-   if(ShowAsHistogram)
-     {
-      PlotIndexSetInteger(0,PLOT_DRAW_TYPE,DRAW_COLOR_HISTOGRAM);
-      PlotIndexSetString(0,PLOT_LABEL,"MACD Histogram");
-     }
-   else
-     {
-      PlotIndexSetInteger(0,PLOT_DRAW_TYPE,DRAW_COLOR_LINE);
-      PlotIndexSetString(0,PLOT_LABEL,"MACD Line");
-     }
+//--- Set plot properties
+   PlotIndexSetInteger(0,PLOT_DRAW_TYPE,DRAW_COLOR_HISTOGRAM);
+   PlotIndexSetInteger(1,PLOT_DRAW_TYPE,DRAW_LINE);
+   PlotIndexSetInteger(2,PLOT_DRAW_TYPE,DRAW_LINE);
 
 //--- indicator buffers mapping
    SetIndexBuffer(0,MACDLineBuffer,INDICATOR_DATA);
    SetIndexBuffer(1,ColorBuffer,INDICATOR_COLOR_INDEX);
-   SetIndexBuffer(2,ExtSignalBuffer,INDICATOR_DATA);
-   SetIndexBuffer(3,ExtFastMaBuffer,INDICATOR_CALCULATIONS);
-   SetIndexBuffer(4,ExtSlowMaBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(2,MACDLineBorderBuffer,INDICATOR_DATA);
+   SetIndexBuffer(3,ExtSignalBuffer,INDICATOR_DATA);
+   SetIndexBuffer(4,ExtFastMaBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(5,ExtSlowMaBuffer,INDICATOR_CALCULATIONS);
    
 //--- sets first bar from what index will be drawn
-   PlotIndexSetInteger(0,PLOT_DRAW_BEGIN,InpSlowEMA-1); // For MACD Line/Histogram
-   PlotIndexSetInteger(1,PLOT_DRAW_BEGIN, (InpSlowEMA-1)+(InpSignalSMA-1)); // For Signal Line
-   PlotIndexSetInteger(1,PLOT_DRAW_TYPE,DRAW_LINE);
+   PlotIndexSetInteger(0,PLOT_DRAW_BEGIN,InpSlowEMA-1); // For MACD Histogram
+   PlotIndexSetInteger(1,PLOT_DRAW_BEGIN,InpSlowEMA-1); // For MACD Line
+   PlotIndexSetInteger(2,PLOT_DRAW_BEGIN, (InpSlowEMA-1)+(InpSignalSMA-1)); // For Signal Line
    
 //--- name for indicator subwindow label
-   string short_name=StringFormat("MACD(%d,%d,%d) %s",InpFastEMA,InpSlowEMA,InpSignalSMA,ShowAsHistogram?"Histogram":"Line");
+   string short_name=StringFormat("MACD(%d,%d,%d)",InpFastEMA,InpSlowEMA,InpSignalSMA);
    IndicatorSetString(INDICATOR_SHORTNAME,short_name);
    
 //--- get MA handles
@@ -201,6 +205,7 @@ int OnCalculate(const int rates_total,
    for(int i=start; i<rates_total && !IsStopped(); i++)
      {
       MACDLineBuffer[i]=ExtFastMaBuffer[i]-ExtSlowMaBuffer[i];
+      MACDLineBorderBuffer[i] = MACDLineBuffer[i];
 
       // Calculate ExtSignalBuffer[i] using SMA on MACDLineBuffer
       if (i >= macdDrawBeginIndex + InpSignalSMA - 1)
