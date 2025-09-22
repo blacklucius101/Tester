@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                                    Long-MACD.mq5 |
+//|                                                    reMACD.mq5 |
 //|                             Copyright 2000-2025, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
@@ -79,7 +79,7 @@ void OnInit()
    PlotIndexSetInteger(2,PLOT_DRAW_BEGIN, (InpSlowEMA-1)+(InpSignalSMA-1)); // For Signal Line
    
 //--- name for indicator subwindow label
-   string short_name=StringFormat("MACD(%d,%d,%d)",InpFastEMA,InpSlowEMA,InpSignalSMA);
+   string short_name=StringFormat("reMACD(%d,%d,%d)",InpFastEMA,InpSlowEMA,InpSignalSMA);
    IndicatorSetString(INDICATOR_SHORTNAME,short_name);
    
 //--- get MA handles
