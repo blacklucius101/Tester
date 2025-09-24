@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                              i-ImpulseSystem.mq5 |
+//|                                         i-ImpulseSystem_Bars.mq5 |
 //|                        Copyright 2010, Dmitry Zhebrak aka Necron |
 //|                                            http://www.mqlcoder.ru|
 //+------------------------------------------------------------------+
@@ -11,18 +11,19 @@
 #property indicator_chart_window
 #property indicator_buffers 7
 #property indicator_plots 1
-#property indicator_type1   DRAW_COLOR_CANDLES
+#property indicator_type1   DRAW_COLOR_BARS
 #property indicator_color1  Lime,Red,Gray
 #property indicator_width1  1
-#property indicator_label1  "Open;High;Low;Close"
+#property indicator_label1  "Open;Close"
 
 double OBuffer[];
 double HBuffer[];
 double LBuffer[];
 double CBuffer[];
+double ColorBuffer[];
 double OsMaBuffer[];
 double EMABuffer[];
-double ColorBuffer[];
+
 //--- handles
 int    hOsMaBuffer;
 int    hEMABuffer;
@@ -36,17 +37,19 @@ int OnInit()
       Print("It's better to set candstick mode on the chart.");
      }
 //--- indicator buffers mapping
-   SetIndexBuffer(0,OBuffer,INDICATOR_DATA);
-   SetIndexBuffer(1,HBuffer,INDICATOR_DATA);
-   SetIndexBuffer(2,LBuffer,INDICATOR_DATA);
-   SetIndexBuffer(3,CBuffer,INDICATOR_DATA);
-   SetIndexBuffer(4,ColorBuffer,INDICATOR_COLOR_INDEX);
-   SetIndexBuffer(5,OsMaBuffer,INDICATOR_CALCULATIONS);
-   SetIndexBuffer(6,EMABuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(0, OBuffer, INDICATOR_DATA); // Open
+   SetIndexBuffer(1, HBuffer, INDICATOR_DATA); // High
+   SetIndexBuffer(2, LBuffer, INDICATOR_DATA); // Low
+   SetIndexBuffer(3, CBuffer, INDICATOR_DATA); // Close
+   SetIndexBuffer(4, ColorBuffer, INDICATOR_COLOR_INDEX); // Color
+   SetIndexBuffer(5, OsMaBuffer, INDICATOR_CALCULATIONS);
+   SetIndexBuffer(6, EMABuffer, INDICATOR_CALCULATIONS);
 //--- set indicator digits
    IndicatorSetInteger(INDICATOR_DIGITS,_Digits);
 //--- sets first bar from what index will be drawn
-   PlotIndexSetInteger(4,PLOT_DRAW_BEGIN,27);
+   PlotIndexSetInteger(2,PLOT_DRAW_BEGIN,27);
+//--- sets bar width
+   PlotIndexSetInteger(0, PLOT_LINE_WIDTH, 2);
 //--- set indicator shortname   
    IndicatorSetString(INDICATOR_SHORTNAME,"i-ImpulseSystem");
 //--- don't show indicator data in DataWindow
@@ -112,23 +115,17 @@ int OnCalculate(const int rates_total,
 
    for(i=start;i<rates_total;i++)
      {
-      OBuffer[i]=open[i];
-      HBuffer[i]=high[i];
-      LBuffer[i]=low[i];
-      CBuffer[i]=close[i];
-      //--- green zone
+      OBuffer[i] = open[i];
+      HBuffer[i] = high[i];
+      LBuffer[i] = low[i];
+      CBuffer[i] = close[i];
+
       if(OsMaBuffer[i]>OsMaBuffer[i-1] && EMABuffer[i]>EMABuffer[i-1])
-        {
-         ColorBuffer[i]=0.0;
-        }
+         ColorBuffer[i] = 0.0;  // Lime
       else if(OsMaBuffer[i]<OsMaBuffer[i-1] && EMABuffer[i]<EMABuffer[i-1])
-        {
-         ColorBuffer[i]=1.0;
-        }
+         ColorBuffer[i] = 1.0;  // Red
       else
-        {
-         ColorBuffer[i]=2.0;
-        }
+         ColorBuffer[i] = 2.0;  // Gray
      }
 //--- return value of prev_calculated for next call
    return(rates_total);
