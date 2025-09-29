@@ -258,11 +258,10 @@ void UpdateAutoSLTPDisplay()
     ObjectSetString(0, slLabel, OBJPROP_TEXT, "SL: " + DoubleToString(stopLossCurrency, 0) + " " + AccountInfoString(ACCOUNT_CURRENCY));
 
     // --- Display Automatic TP ---
-    double atr_in_points = currentAtr / _Point;
     double tp_points = 0;
-    if (atr_in_points < 37) {
+    if (currentAtr < 37) {
         tp_points = 3000;
-    } else if (atr_in_points <= 65) {
+    } else if (currentAtr <= 65) {
         tp_points = 5000;
     } else {
         tp_points = 10000;
@@ -541,11 +540,10 @@ void ExecuteBuy()
     // --- END Automatic SL Calculation ---
 
     // --- Automatic TP Calculation ---
-    double atr_in_points = currentAtr / _Point;
     double tp_points = 0;
-    if (atr_in_points < 37) {
+    if (currentAtr < 37) {
         tp_points = 3000;
-    } else if (atr_in_points <= 65) {
+    } else if (currentAtr <= 65) {
         tp_points = 5000;
     } else {
         tp_points = 10000;
@@ -598,11 +596,10 @@ void ExecuteSell()
     // --- END Automatic SL Calculation ---
 
     // --- Automatic TP Calculation ---
-    double atr_in_points = currentAtr / _Point;
     double tp_points = 0;
-    if (atr_in_points < 37) {
+    if (currentAtr < 37) {
         tp_points = 3000;
-    } else if (atr_in_points <= 65) {
+    } else if (currentAtr <= 65) {
         tp_points = 5000;
     } else {
         tp_points = 10000;
