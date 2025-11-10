@@ -24,7 +24,6 @@ input string   MinimizeKey = "m";
 input string   ExitKey = "x";
 
 input group "=== RISK ==="
-input int      MaxPositions = 2;
 
 string tpLabel;
 string slLabel;
@@ -190,7 +189,7 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
         }
         else if(sparam == closeBtn)
         {
-            CloseLastPosition();
+            ClosePosition();
             FlashButton(closeBtn, C'255,150,0');
             ObjectSetInteger(0, closeBtn, OBJPROP_STATE, false);
         }
@@ -240,7 +239,7 @@ void OnChartEvent(const int id, const long& lparam, const double& dparam, const 
         }
         else if(isCloseKey)
         {
-            CloseLastPosition();
+            ClosePosition();
             FlashButton(closeBtn, C'255,150,0');
         }
         else if(StringCompare(key, MinimizeKey, false) == 0)
@@ -641,117 +640,94 @@ void ExecuteSell()
 
 void ExecuteBreakeven()
 {
-    int totalPositions = PositionsTotal();
-    int positionsModified = 0;
-
-    for (int i = totalPositions - 1; i >= 0; i--)
+    if (position.Select(_Symbol) && position.Magic() == 888888)
     {
-        if (position.SelectByIndex(i) && position.Symbol() == _Symbol && position.Magic() == 888888)
+        double entryPrice = position.PriceOpen();
+        double currentProfit = position.Profit();
+        double currentSL = position.StopLoss();
+        double currentTP = position.TakeProfit();
+        ulong ticket = position.Ticket();
+        
+        double newSL = currentSL;
+        double newTP = currentTP;
+
+        if (currentProfit > 0)
         {
-            double entryPrice = position.PriceOpen();
-            double currentProfit = position.Profit();
-            double currentSL = position.StopLoss();
-            double currentTP = position.TakeProfit();
-            ulong ticket = position.Ticket();
-            
-            double newSL = currentSL;
-            double newTP = currentTP;
-
-            if (currentProfit > 0)
+            if (position.PositionType() == POSITION_TYPE_BUY)
             {
-                // In profit: move SL to lock profit
-                if (position.PositionType() == POSITION_TYPE_BUY)
+                newSL = entryPrice + 3000 * _Point;
+                if(newSL >= SymbolInfoDouble(_Symbol, SYMBOL_BID))
                 {
-                    newSL = entryPrice + 3000 * _Point;
-                    if(newSL >= SymbolInfoDouble(_Symbol, SYMBOL_BID))
-                    {
-                        Print("Breakeven for BUY #", ticket, ": Price has not moved enough to lock 1000 points profit. Current Bid: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), ", Required SL: ", newSL);
-                        continue;
-                    }
+                    Print("Breakeven for BUY #", ticket, ": Price has not moved enough to lock 1000 points profit. Current Bid: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), ", Required SL: ", newSL);
+                    SetStatus("PRICE TOO CLOSE", C'255,215,0');
+                    return;
                 }
-                else // POSITION_TYPE_SELL
+            }
+            else // POSITION_TYPE_SELL
+            {
+                newSL = entryPrice - 3000 * _Point;
+                 if(newSL <= SymbolInfoDouble(_Symbol, SYMBOL_ASK))
                 {
-                    newSL = entryPrice - 3000 * _Point;
-                     if(newSL <= SymbolInfoDouble(_Symbol, SYMBOL_ASK))
-                    {
-                        Print("Breakeven for SELL #", ticket, ": Price has not moved enough to lock 1000 points profit. Current Ask: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK), ", Required SL: ", newSL);
-                        continue;
-                    }
+                    Print("Breakeven for SELL #", ticket, ": Price has not moved enough to lock 1000 points profit. Current Ask: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK), ", Required SL: ", newSL);
+                    SetStatus("PRICE TOO CLOSE", C'255,215,0');
+                    return;
                 }
-                Print("Breakeven: Modifying profitable position #", ticket, " New SL: ", DoubleToString(newSL, _Digits));
             }
-            else if (currentProfit < 0)
-            {
-                // In loss: set a closer TP
-                if (position.PositionType() == POSITION_TYPE_BUY)
-                {
-                    newTP = entryPrice + 3000 * _Point;
-                    if(newTP <= SymbolInfoDouble(_Symbol, SYMBOL_ASK))
-                    {
-                         Print("Breakeven for BUY #", ticket, ": New TP is below or at current Ask price. Current Ask: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK), ", Required TP: ", newTP);
-                         continue;
-                    }
-                }
-                else // POSITION_TYPE_SELL
-                {
-                    newTP = entryPrice - 3000 * _Point;
-                    if(newTP >= SymbolInfoDouble(_Symbol, SYMBOL_BID))
-                    {
-                         Print("Breakeven for SELL #", ticket, ": New TP is above or at current Bid price. Current Bid: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), ", Required TP: ", newTP);
-                         continue;
-                    }
-                }
-                Print("Breakeven: Modifying losing position #", ticket, " New TP: ", DoubleToString(newTP, _Digits));
-            }
-            else
-            {
-                continue; // At breakeven, do nothing
-            }
-
-            if (trade.PositionModify(ticket, newSL, newTP))
-            {
-                positionsModified++;
-            }
-            else
-            {
-                Print("Failed to modify position #", ticket, ". Error: ", trade.ResultRetcodeDescription());
-            }
+            Print("Breakeven: Modifying profitable position #", ticket, " New SL: ", DoubleToString(newSL, _Digits));
         }
-    }
+        else if (currentProfit < 0)
+        {
+            if (position.PositionType() == POSITION_TYPE_BUY)
+            {
+                newTP = entryPrice + 3000 * _Point;
+                if(newTP <= SymbolInfoDouble(_Symbol, SYMBOL_ASK))
+                {
+                     Print("Breakeven for BUY #", ticket, ": New TP is below or at current Ask price. Current Ask: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK), ", Required TP: ", newTP);
+                     SetStatus("PRICE TOO CLOSE", C'255,215,0');
+                     return;
+                }
+            }
+            else // POSITION_TYPE_SELL
+            {
+                newTP = entryPrice - 3000 * _Point;
+                if(newTP >= SymbolInfoDouble(_Symbol, SYMBOL_BID))
+                {
+                     Print("Breakeven for SELL #", ticket, ": New TP is above or at current Bid price. Current Bid: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), ", Required TP: ", newTP);
+                     SetStatus("PRICE TOO CLOSE", C'255,215,0');
+                     return;
+                }
+            }
+            Print("Breakeven: Modifying losing position #", ticket, " New TP: ", DoubleToString(newTP, _Digits));
+        }
+        else
+        {
+            SetStatus("AT BREAKEVEN", C'255,215,0');
+            return;
+        }
 
-    if (positionsModified > 0)
-    {
-        SetStatus("BREAKEVEN APPLIED", C'0,255,255');
-        PlaySound("ok.wav");
+        if (trade.PositionModify(ticket, newSL, newTP))
+        {
+            SetStatus("BREAKEVEN APPLIED", C'0,255,255');
+            PlaySound("ok.wav");
+        }
+        else
+        {
+            Print("Failed to modify position #", ticket, ". Error: ", trade.ResultRetcodeDescription());
+            SetStatus("MODIFY FAILED", C'255,69,0');
+        }
     }
     else
     {
-        SetStatus("NO ACTION TAKEN", C'255,215,0');
-        Print("Breakeven executed, but no positions were modified.");
+        SetStatus("NO POSITION", C'255,215,0');
+        Print("Breakeven executed, but no open position found.");
     }
 }
 
-void CloseLastPosition()
+void ClosePosition()
 {
-    ulong ticket = 0;
-    datetime lastTime = 0;
-    int totalPos = 0;
-    
-    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    if(position.Select(_Symbol))
     {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
-        {
-            totalPos++;
-            if(position.Time() > lastTime)
-            {
-                lastTime = position.Time();
-                ticket = position.Ticket();
-            }
-        }
-    }
-    
-    if(ticket > 0)
-    {
+        ulong ticket = position.Ticket();
         Print("Attempting to close position: ", ticket);
         if(trade.PositionClose(ticket))
         {
@@ -774,16 +750,9 @@ void CloseLastPosition()
 
 bool CanTrade()
 {
-    int pos = 0;
-    for(int i = 0; i < PositionsTotal(); i++)
+    if(position.Select(_Symbol))
     {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
-            pos++;
-    }
-    
-    if(pos >= MaxPositions)
-    {
-        SetStatus("MAX POSITIONS", C'255,215,0');
+        SetStatus("POSITION OPEN", C'255,215,0');
         return false;
     }
     
@@ -804,22 +773,18 @@ bool CanTrade()
 
 void UpdateDashboard()
 {
-    int positions = 0;
-    double totalPL = 0;
-    
-    for(int i = 0; i < PositionsTotal(); i++)
-    {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
-        {
-            positions++;
-            totalPL += position.Profit();
-        }
-    }
-    
     double spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point;
     
-    ObjectSetString(0, posLbl, OBJPROP_TEXT, StringFormat("POSITIONS: %d", positions));
-    ObjectSetInteger(0, posLbl, OBJPROP_COLOR, positions > 0 ? C'255,215,0' : C'0,255,255');
+    if(position.Select(_Symbol))
+    {
+        ObjectSetString(0, posLbl, OBJPROP_TEXT, "POSITION: 1");
+        ObjectSetInteger(0, posLbl, OBJPROP_COLOR, C'255,215,0');
+    }
+    else
+    {
+        ObjectSetString(0, posLbl, OBJPROP_TEXT, "POSITION: 0");
+        ObjectSetInteger(0, posLbl, OBJPROP_COLOR, C'0,255,255');
+    }
     
     ObjectSetString(0, spreadLbl, OBJPROP_TEXT, StringFormat("SPREAD: %.1f", spread));
     color spreadColor = spread <= 2.0 ? C'50,205,50' : (spread <= 5.0 ? C'255,215,0' : C'255,69,0');
@@ -834,14 +799,14 @@ void UpdateDashboard()
     string status = "READY";
     color statusColor = C'0,191,255';
     
-    if(positions > 0)
+    if(position.Select(_Symbol))
     {
-        if(totalPL > 0)
+        if(position.Profit() > 0)
         {
             status = "IN PROFIT";
             statusColor = C'50,205,50';
         }
-        else if(totalPL < 0)
+        else if(position.Profit() < 0)
         {
             status = "IN LOSS";
             statusColor = C'255,69,0';
@@ -905,12 +870,9 @@ double GetDailyPL()
         }
     }
     
-    for(int i = 0; i < PositionsTotal(); i++)
+    if(position.Select(_Symbol))
     {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol)
-        {
-            profit += position.Profit() + position.Swap() + position.Commission();
-        }
+        profit += position.Profit() + position.Swap() + position.Commission();
     }
     
     return profit;
@@ -932,53 +894,50 @@ void CheckDailyReset()
 
 void ManageTrailingStop()
 {
-    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    if(position.Select(_Symbol) && position.Magic() == 888888)
     {
-        if(position.SelectByIndex(i) && position.Symbol() == _Symbol && position.Magic() == 888888)
+        double tp = position.TakeProfit();
+        double sl = position.StopLoss();
+        double openPrice = position.PriceOpen();
+        double currentPrice = (position.PositionType() == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+        
+        double tpPoints = 0;
+        if (tp > 0)
         {
-            double tp = position.TakeProfit();
-            double sl = position.StopLoss();
-            double openPrice = position.PriceOpen();
-            double currentPrice = (position.PositionType() == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-            
-            double tpPoints = 0;
-            if (tp > 0)
-            {
-                if (position.PositionType() == POSITION_TYPE_BUY)
-                    tpPoints = (tp - openPrice) / _Point;
-                else
-                    tpPoints = (openPrice - tp) / _Point;
-            }
+            if (position.PositionType() == POSITION_TYPE_BUY)
+                tpPoints = (tp - openPrice) / _Point;
+            else
+                tpPoints = (openPrice - tp) / _Point;
+        }
 
-            double trailingStopPoints = 0;
-            if (MathAbs(tpPoints - 10000) < 1)
-                trailingStopPoints = 5000;
-            else if (MathAbs(tpPoints - 5000) < 1)
-                trailingStopPoints = 3000;
+        double trailingStopPoints = 0;
+        if (MathAbs(tpPoints - 10000) < 1)
+            trailingStopPoints = 5000;
+        else if (MathAbs(tpPoints - 5000) < 1)
+            trailingStopPoints = 3000;
 
-            if(trailingStopPoints > 0)
+        if(trailingStopPoints > 0)
+        {
+            double newSL = 0;
+            if(position.PositionType() == POSITION_TYPE_BUY)
             {
-                double newSL = 0;
-                if(position.PositionType() == POSITION_TYPE_BUY)
+                newSL = currentPrice - trailingStopPoints * _Point;
+                if(newSL > openPrice && newSL > sl)
                 {
-                    newSL = currentPrice - trailingStopPoints * _Point;
-                    if(newSL > openPrice && newSL > sl)
+                    if(trade.PositionModify(position.Ticket(), newSL, tp))
                     {
-                        if(trade.PositionModify(position.Ticket(), newSL, tp))
-                        {
-                            Print("Trailing stop for BUY position updated to ", newSL);
-                        }
+                        Print("Trailing stop for BUY position updated to ", newSL);
                     }
                 }
-                else // SELL
+            }
+            else // SELL
+            {
+                newSL = currentPrice + trailingStopPoints * _Point;
+                if(newSL < openPrice && (sl == 0 || newSL < sl))
                 {
-                    newSL = currentPrice + trailingStopPoints * _Point;
-                    if(newSL < openPrice && (sl == 0 || newSL < sl))
+                    if(trade.PositionModify(position.Ticket(), newSL, tp))
                     {
-                        if(trade.PositionModify(position.Ticket(), newSL, tp))
-                        {
-                            Print("Trailing stop for SELL position updated to ", newSL);
-                        }
+                        Print("Trailing stop for SELL position updated to ", newSL);
                     }
                 }
             }
