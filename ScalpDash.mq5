@@ -894,13 +894,15 @@ void CheckDailyReset()
 
 void ManageTrailingStop()
 {
-    if(position.Select(_Symbol) && position.Magic() == 888888)
+    if (position.Select(_Symbol) && position.Magic() == 888888)
     {
         double tp = position.TakeProfit();
         double sl = position.StopLoss();
         double openPrice = position.PriceOpen();
-        double currentPrice = (position.PositionType() == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-        
+        double currentPrice = (position.PositionType() == POSITION_TYPE_BUY)
+                              ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
+                              : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
         double tpPoints = 0;
         if (tp > 0)
         {
@@ -910,37 +912,60 @@ void ManageTrailingStop()
                 tpPoints = (openPrice - tp) / _Point;
         }
 
-        double trailingStopPoints = 0;
+        // Define StartTrailing (activation level) based on TP distance
+        double startTrailingPoints = 0;
         if (MathAbs(tpPoints - 10000) < 1)
-            trailingStopPoints = 5000;
+            startTrailingPoints = 5000;  // trailing starts after 5000 pts profit
         else if (MathAbs(tpPoints - 5000) < 1)
-            trailingStopPoints = 3000;
+            startTrailingPoints = 3000;  // trailing starts after 3000 pts profit
 
-        if(trailingStopPoints > 0)
+        // Define trailing distance (step)
+        double trailingStepPoints = 500; // how far behind price SL stays once active
+
+        if (startTrailingPoints > 0)
         {
-            double newSL = 0;
-            if(position.PositionType() == POSITION_TYPE_BUY)
+            double newSL = sl;
+
+            if (position.PositionType() == POSITION_TYPE_BUY)
             {
-                newSL = currentPrice - trailingStopPoints * _Point;
-                if(newSL > openPrice && newSL > sl)
+                double profitPoints = (currentPrice - openPrice) / _Point;
+
+                // Activate trailing once profit >= start + step
+                if (profitPoints >= startTrailingPoints + trailingStepPoints)
                 {
-                    if(trade.PositionModify(position.Ticket(), newSL, tp))
+                    // Calculate where SL should be: maintain trailingStepPoints behind current price
+                    double snapLevel = openPrice + startTrailingPoints * _Point;
+                    double potentialSL = currentPrice - trailingStepPoints * _Point;
+
+                    // On activation, SL jumps to lock startTrailing profit
+                    newSL = MathMax(snapLevel, potentialSL);
+
+                    if (newSL > sl)
                     {
-                        Print("Trailing stop for BUY position updated to ", newSL);
+                        if (trade.PositionModify(position.Ticket(), newSL, tp))
+                            Print("BUY trailing stop updated to ", DoubleToString(newSL, _Digits));
                     }
                 }
             }
             else // SELL
             {
-                newSL = currentPrice + trailingStopPoints * _Point;
-                if(newSL < openPrice && (sl == 0 || newSL < sl))
+                double profitPoints = (openPrice - currentPrice) / _Point;
+
+                if (profitPoints >= startTrailingPoints + trailingStepPoints)
                 {
-                    if(trade.PositionModify(position.Ticket(), newSL, tp))
+                    double snapLevel = openPrice - startTrailingPoints * _Point;
+                    double potentialSL = currentPrice + trailingStepPoints * _Point;
+
+                    newSL = MathMin(snapLevel, potentialSL);
+
+                    if (sl == 0 || newSL < sl)
                     {
-                        Print("Trailing stop for SELL position updated to ", newSL);
+                        if (trade.PositionModify(position.Ticket(), newSL, tp))
+                            Print("SELL trailing stop updated to ", DoubleToString(newSL, _Digits));
                     }
                 }
             }
         }
     }
 }
+
