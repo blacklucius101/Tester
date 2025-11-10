@@ -1,6 +1,34 @@
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
 
+// --- START CACHED VARS ---
+struct CCache
+{
+    // Symbol properties
+    double minLot;
+    double maxLot;
+    double lotStep;
+    double tick_value;
+    double tick_size;
+    double point;
+    int    digits;
+
+    // Scaled UI dimensions
+    int s_dashX;
+    int s_dashY;
+    int s_buttonSize;
+    int s_btnW;
+    int s_btnH;
+    int s_gap;
+    int s_panelW;
+    int s_panelH;
+    int s_iconBtnSize;
+};
+
+CCache cache;
+// --- END CACHED VARS ---
+
+
 // --- TP/SL UI ---
 input int        Slippage = 1000;
 
@@ -64,16 +92,13 @@ string minimizedPanel = prefix + "MINIMIZED_PANEL";
 
 double GetLotSize()
 {
-   double lot = AccountInfoDouble(ACCOUNT_BALANCE) / 1000.0;
-   // Ensure lot respects broker min/max requirements
-   double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+    double lot = AccountInfoDouble(ACCOUNT_BALANCE) / 1000.0;
+    
+    // Use cached values
+    lot = MathFloor(lot / cache.lotStep) * cache.lotStep; // round to step
+    lot = MathMax(cache.minLot, MathMin(cache.maxLot, lot)); // clamp to min/max
 
-   lot = MathFloor(lot / lotStep) * lotStep; // round to step
-   lot = MathMax(minLot, MathMin(maxLot, lot)); // clamp to min/max
-
-   return lot;
+    return lot;
 }
 
 int OnInit()
@@ -83,6 +108,27 @@ int OnInit()
     resetTime = TimeCurrent();
     dailyPL = GetDailyPL();
     dailyStartingBalance = AccountInfoDouble(ACCOUNT_BALANCE) - dailyPL;
+    
+    // --- START CACHING ---
+    cache.minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    cache.maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    cache.lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+    cache.tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+    cache.tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+    cache.point = _Point;
+    cache.digits = _Digits;
+
+    // Pre-calculate scaled UI dimensions
+    cache.s_dashX = SX(DashX);
+    cache.s_dashY = SY(DashY);
+    cache.s_buttonSize = SX(ButtonSize);
+    cache.s_btnW = SX(ButtonSize);
+    cache.s_btnH = SY(40);
+    cache.s_gap = SX(5);
+    cache.s_panelW = (cache.s_btnW * 3) + (cache.s_gap * 2) + SX(20);
+    cache.s_panelH = SY(280);
+    cache.s_iconBtnSize = SX(20);
+    // --- END CACHING ---
     
     // --- TP/SL UI Init ---
     tpLabel = prefix + "TP_LABEL";
@@ -147,14 +193,14 @@ void MinimizeDashboard()
     DeleteAllObjects();
     isMinimized = true;
 
-    int x = SX(DashX);
-    int y = SY(DashY);
+    int x = cache.s_dashX;
+    int y = cache.s_dashY;
     int panelW = SX(60);
     int panelH = SY(25);
 
     CreateMainPanel(minimizedPanel, x - SX(10), y - SY(10), panelW, panelH);
 
-    int iconBtnSize = SX(20);
+    int iconBtnSize = cache.s_iconBtnSize;
     int iconBtnY = y - SY(8);
     int iconBtnX = x + panelW - iconBtnSize - SX(15);
     
@@ -316,13 +362,13 @@ void CreateIconButton(string name, int x, int y, int w, int h, string text, colo
 
 void CreateFuturisticDashboard()
 {
-    int x = SX(DashX);
-    int y = SY(DashY);
-    int btnW = SX(ButtonSize);
-    int btnH = SY(40);
-    int gap = SX(5);
-    int panelW = (btnW * 3) + (gap * 2) + SX(20);
-    int panelH = SY(280);
+    int x = cache.s_dashX;
+    int y = cache.s_dashY;
+    int btnW = cache.s_btnW;
+    int btnH = cache.s_btnH;
+    int gap = cache.s_gap;
+    int panelW = cache.s_panelW;
+    int panelH = cache.s_panelH;
     
     CreateProPanel(glowPanel, x - SX(20), y - SY(20), panelW + SX(40), panelH + SY(40));
     CreateMainPanel(mainPanel, x - SX(10), y - SY(10), panelW + SX(20), panelH + SY(20));
@@ -367,7 +413,7 @@ void CreateFuturisticDashboard()
     }
     
     // --- Window Control Buttons ---
-    int iconBtnSize = SX(20);
+    int iconBtnSize = cache.s_iconBtnSize;
     int iconBtnY = y - SY(15);
     int iconBtnX = x + panelW - iconBtnSize + SX(10);
     
@@ -541,11 +587,9 @@ void ExecuteBuy()
     // --- Automatic SL Calculation ---
     double stopLossCurrency = (int)(AccountInfoDouble(ACCOUNT_BALANCE) / 2.0);
     double sl_points = 0;
-    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-    if(tick_value > 0 && tick_size > 0 && lot > 0)
+    if(cache.tick_value > 0 && cache.tick_size > 0 && lot > 0)
     {
-        double one_point_value = (tick_value / tick_size) * _Point * lot;
+        double one_point_value = (cache.tick_value / cache.tick_size) * cache.point * lot;
         if(one_point_value > 0)
             sl_points = stopLossCurrency / one_point_value;
     }
@@ -597,11 +641,9 @@ void ExecuteSell()
     // --- Automatic SL Calculation ---
     double stopLossCurrency = (int)(AccountInfoDouble(ACCOUNT_BALANCE) / 2.0);
     double sl_points = 0;
-    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-    if(tick_value > 0 && tick_size > 0 && lot > 0)
+    if(cache.tick_value > 0 && cache.tick_size > 0 && lot > 0)
     {
-        double one_point_value = (tick_value / tick_size) * _Point * lot;
+        double one_point_value = (cache.tick_value / cache.tick_size) * cache.point * lot;
         if(one_point_value > 0)
             sl_points = stopLossCurrency / one_point_value;
     }
@@ -655,7 +697,7 @@ void ExecuteBreakeven()
         {
             if (position.PositionType() == POSITION_TYPE_BUY)
             {
-                newSL = entryPrice + 3000 * _Point;
+                newSL = entryPrice + 3000 * cache.point;
                 if(newSL >= SymbolInfoDouble(_Symbol, SYMBOL_BID))
                 {
                     Print("Breakeven for BUY #", ticket, ": Price has not moved enough to lock 1000 points profit. Current Bid: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), ", Required SL: ", newSL);
@@ -665,7 +707,7 @@ void ExecuteBreakeven()
             }
             else // POSITION_TYPE_SELL
             {
-                newSL = entryPrice - 3000 * _Point;
+                newSL = entryPrice - 3000 * cache.point;
                  if(newSL <= SymbolInfoDouble(_Symbol, SYMBOL_ASK))
                 {
                     Print("Breakeven for SELL #", ticket, ": Price has not moved enough to lock 1000 points profit. Current Ask: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK), ", Required SL: ", newSL);
@@ -673,13 +715,13 @@ void ExecuteBreakeven()
                     return;
                 }
             }
-            Print("Breakeven: Modifying profitable position #", ticket, " New SL: ", DoubleToString(newSL, _Digits));
+            Print("Breakeven: Modifying profitable position #", ticket, " New SL: ", DoubleToString(newSL, cache.digits));
         }
         else if (currentProfit < 0)
         {
             if (position.PositionType() == POSITION_TYPE_BUY)
             {
-                newTP = entryPrice + 3000 * _Point;
+                newTP = entryPrice + 3000 * cache.point;
                 if(newTP <= SymbolInfoDouble(_Symbol, SYMBOL_ASK))
                 {
                      Print("Breakeven for BUY #", ticket, ": New TP is below or at current Ask price. Current Ask: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK), ", Required TP: ", newTP);
@@ -689,7 +731,7 @@ void ExecuteBreakeven()
             }
             else // POSITION_TYPE_SELL
             {
-                newTP = entryPrice - 3000 * _Point;
+                newTP = entryPrice - 3000 * cache.point;
                 if(newTP >= SymbolInfoDouble(_Symbol, SYMBOL_BID))
                 {
                      Print("Breakeven for SELL #", ticket, ": New TP is above or at current Bid price. Current Bid: ", SymbolInfoDouble(_Symbol, SYMBOL_BID), ", Required TP: ", newTP);
@@ -697,7 +739,7 @@ void ExecuteBreakeven()
                      return;
                 }
             }
-            Print("Breakeven: Modifying losing position #", ticket, " New TP: ", DoubleToString(newTP, _Digits));
+            Print("Breakeven: Modifying losing position #", ticket, " New TP: ", DoubleToString(newTP, cache.digits));
         }
         else
         {
@@ -773,7 +815,7 @@ bool CanTrade()
 
 void UpdateDashboard()
 {
-    double spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / _Point;
+    double spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / cache.point;
     
     if(position.Select(_Symbol))
     {
@@ -896,9 +938,9 @@ void ManageTrailingStop()
 {
     if (position.Select(_Symbol) && position.Magic() == 888888)
     {
-        double tp = position.TakeProfit();
-        double sl = position.StopLoss();
-        double openPrice = position.PriceOpen();
+        double tp         = position.TakeProfit();
+        double sl         = position.StopLoss();
+        double openPrice  = position.PriceOpen();
         double currentPrice = (position.PositionType() == POSITION_TYPE_BUY)
                               ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
                               : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
@@ -907,65 +949,72 @@ void ManageTrailingStop()
         if (tp > 0)
         {
             if (position.PositionType() == POSITION_TYPE_BUY)
-                tpPoints = (tp - openPrice) / _Point;
+                tpPoints = (tp - openPrice) / cache.point;
             else
-                tpPoints = (openPrice - tp) / _Point;
+                tpPoints = (openPrice - tp) / cache.point;
         }
 
         // Define StartTrailing (activation level) based on TP distance
         double startTrailingPoints = 0;
         if (MathAbs(tpPoints - 10000) < 1)
-            startTrailingPoints = 5000;  // trailing starts after 5000 pts profit
+            startTrailingPoints = 5000;   // trailing starts after 5000 pts profit
         else if (MathAbs(tpPoints - 5000) < 1)
-            startTrailingPoints = 3000;  // trailing starts after 3000 pts profit
+            startTrailingPoints = 3000;   // trailing starts after 3000 pts profit
 
         // Define trailing distance (step)
-        double trailingStepPoints = 500; // how far behind price SL stays once active
+        double trailingStepPoints = 450;   // how far behind price SL stays once active
+
+        // Define minimum SL move before modifying (to avoid frequent updates)
+        double minMovePoints = 50;         // e.g. only modify if SL moves ≥ 50 points
 
         if (startTrailingPoints > 0)
         {
             double newSL = sl;
 
+            // ===== BUY POSITIONS =====
             if (position.PositionType() == POSITION_TYPE_BUY)
             {
-                double profitPoints = (currentPrice - openPrice) / _Point;
+                double profitPoints = (currentPrice - openPrice) / cache.point;
 
                 // Activate trailing once profit >= start + step
                 if (profitPoints >= startTrailingPoints + trailingStepPoints)
                 {
-                    // Calculate where SL should be: maintain trailingStepPoints behind current price
-                    double snapLevel = openPrice + startTrailingPoints * _Point;
-                    double potentialSL = currentPrice - trailingStepPoints * _Point;
+                    // Calculate target SL
+                    double snapLevel  = openPrice + startTrailingPoints * cache.point;
+                    double potentialSL = currentPrice - trailingStepPoints * cache.point;
 
                     // On activation, SL jumps to lock startTrailing profit
                     newSL = MathMax(snapLevel, potentialSL);
 
-                    if (newSL > sl)
+                    // Only modify if SL is improved AND moved enough distance
+                    if (newSL > sl && MathAbs(newSL - sl) >= minMovePoints * cache.point)
                     {
                         if (trade.PositionModify(position.Ticket(), newSL, tp))
-                            Print("BUY trailing stop updated to ", DoubleToString(newSL, _Digits));
+                            Print("BUY trailing stop updated to ", DoubleToString(newSL, cache.digits));
                     }
                 }
             }
-            else // SELL
+
+            // ===== SELL POSITIONS =====
+            else
             {
-                double profitPoints = (openPrice - currentPrice) / _Point;
+                double profitPoints = (openPrice - currentPrice) / cache.point;
 
                 if (profitPoints >= startTrailingPoints + trailingStepPoints)
                 {
-                    double snapLevel = openPrice - startTrailingPoints * _Point;
-                    double potentialSL = currentPrice + trailingStepPoints * _Point;
+                    double snapLevel  = openPrice - startTrailingPoints * cache.point;
+                    double potentialSL = currentPrice + trailingStepPoints * cache.point;
 
                     newSL = MathMin(snapLevel, potentialSL);
 
-                    if (sl == 0 || newSL < sl)
+                    // Only modify if SL is improved AND moved enough distance
+                    if ((sl == 0 || newSL < sl) && MathAbs(newSL - sl) >= minMovePoints * cache.point)
                     {
                         if (trade.PositionModify(position.Ticket(), newSL, tp))
-                            Print("SELL trailing stop updated to ", DoubleToString(newSL, _Digits));
+                            Print("SELL trailing stop updated to ", DoubleToString(newSL, cache.digits));
                     }
                 }
             }
         }
     }
 }
-
