@@ -15,6 +15,7 @@ input int      ButtonSize = 90;
 
 input group "=== KEYBOARD HOTKEYS ==="
 input bool     EnableHotkeys = true;
+input bool     EnableTrailingStop = true; // User input to enable/disable Trailing Stop
 input string   BuyKey = "1";
 input string   SellKey = "3"; 
 input string   CloseKey = "2";
@@ -134,6 +135,11 @@ void OnTick()
     {
         UpdateDashboard();
         UpdateAutoSLTPDisplay();
+    }
+    
+    if(EnableTrailingStop)
+    {
+        ManageTrailingStop();
     }
 }
 
@@ -548,7 +554,7 @@ void ExecuteBuy()
 
     // --- Automatic TP Calculation ---
     double tp_points = 0;
-    if (currentAtr < 37) {
+    if (currentAtr < 40) {
         tp_points = 3000;
     } else if (currentAtr <= 65) {
         tp_points = 5000;
@@ -921,5 +927,61 @@ void CheckDailyReset()
         dailyStartingBalance = AccountInfoDouble(ACCOUNT_BALANCE);
         resetTime = current;
         Print("Daily reset");
+    }
+}
+
+void ManageTrailingStop()
+{
+    for(int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        if(position.SelectByIndex(i) && position.Symbol() == _Symbol && position.Magic() == 888888)
+        {
+            double tp = position.TakeProfit();
+            double sl = position.StopLoss();
+            double openPrice = position.PriceOpen();
+            double currentPrice = (position.PositionType() == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+            
+            double tpPoints = 0;
+            if (tp > 0)
+            {
+                if (position.PositionType() == POSITION_TYPE_BUY)
+                    tpPoints = (tp - openPrice) / _Point;
+                else
+                    tpPoints = (openPrice - tp) / _Point;
+            }
+
+            double trailingStopPoints = 0;
+            if (MathAbs(tpPoints - 10000) < 1)
+                trailingStopPoints = 5000;
+            else if (MathAbs(tpPoints - 5000) < 1)
+                trailingStopPoints = 3000;
+
+            if(trailingStopPoints > 0)
+            {
+                double newSL = 0;
+                if(position.PositionType() == POSITION_TYPE_BUY)
+                {
+                    newSL = currentPrice - trailingStopPoints * _Point;
+                    if(newSL > openPrice && newSL > sl)
+                    {
+                        if(trade.PositionModify(position.Ticket(), newSL, tp))
+                        {
+                            Print("Trailing stop for BUY position updated to ", newSL);
+                        }
+                    }
+                }
+                else // SELL
+                {
+                    newSL = currentPrice + trailingStopPoints * _Point;
+                    if(newSL < openPrice && (sl == 0 || newSL < sl))
+                    {
+                        if(trade.PositionModify(position.Ticket(), newSL, tp))
+                        {
+                            Print("Trailing stop for SELL position updated to ", newSL);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
