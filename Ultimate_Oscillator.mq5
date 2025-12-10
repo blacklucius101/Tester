@@ -15,11 +15,13 @@ void OnDeinit(const int reason)
 #include <MovingAverages.mqh>
 //--- indicator settings
 #property indicator_separate_window
-#property indicator_buffers 5
+#property indicator_buffers 6
 #property indicator_plots   1
-#property indicator_type1   DRAW_LINE
-#property indicator_color1  clrDodgerBlue
+#property indicator_type1   DRAW_COLOR_LINE
+#property indicator_color1  clrLime,clrRed
 //--- input parameters
+input color InpUpColor=clrLime;      // Up color
+input color InpDownColor=clrRed;    // Down color
 input int InpFastPeriod=7;     // Fast ATR period
 input int InpMiddlePeriod=14;  // Middle ATR period
 input int InpSlowPeriod=28;    // Slow ATR period
@@ -28,6 +30,7 @@ input int InpMiddleK=2;        // Middle K
 input int InpSlowK=1;          // Slow K
 //--- indicator buffers
 double    ExtUOBuffer[];
+double    ExtColorBuffer[];
 double    ExtBPBuffer[];
 double    ExtFastATRBuffer[];
 double    ExtMiddleATRBuffer[];
@@ -60,10 +63,16 @@ void OnInit()
   {
 //--- indicator buffers mapping
    SetIndexBuffer(0,ExtUOBuffer,INDICATOR_DATA);
-   SetIndexBuffer(1,ExtBPBuffer,INDICATOR_CALCULATIONS);
-   SetIndexBuffer(2,ExtFastATRBuffer,INDICATOR_CALCULATIONS);
-   SetIndexBuffer(3,ExtMiddleATRBuffer,INDICATOR_CALCULATIONS);
-   SetIndexBuffer(4,ExtSlowATRBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(1,ExtColorBuffer,INDICATOR_COLOR_INDEX);
+   SetIndexBuffer(2,ExtBPBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(3,ExtFastATRBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(4,ExtMiddleATRBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(5,ExtSlowATRBuffer,INDICATOR_CALCULATIONS);
+
+//--- set plot colors
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,InpUpColor);
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,InpDownColor);
+
 //--- set accuracy
    IndicatorSetInteger(INDICATOR_DIGITS,2);
 //--- set levels
@@ -200,6 +209,21 @@ int OnCalculate(const int rates_total,
         }
       else
          ExtUOBuffer[i]=ExtUOBuffer[i-1]; // set current Ultimate value as previous Ultimate value
+
+      //--- Set color based on slope
+      if(i > 0)
+        {
+         if(ExtUOBuffer[i] > ExtUOBuffer[i-1])
+            ExtColorBuffer[i] = 0; // Up color
+         else if(ExtUOBuffer[i] < ExtUOBuffer[i-1])
+            ExtColorBuffer[i] = 1; // Down color
+         else
+            ExtColorBuffer[i] = ExtColorBuffer[i-1]; // Same color for flat
+        }
+      else
+        {
+         ExtColorBuffer[i] = 0; // Default color for the first bar
+        }
      }
 //--- OnCalculate done. Return new prev_calculated.
    int start_breakout_bar;
