@@ -8,14 +8,14 @@
 #property version   "1.00"
 #property description "\"Tarzan\" Indicator"
 #property indicator_separate_window
-#property indicator_buffers 7
+#property indicator_buffers 8
 #property indicator_plots   6
 //--- plot RSI
 #property indicator_label1  "RSI"
-#property indicator_type1   DRAW_LINE
-#property indicator_color1  clrCadetBlue
+#property indicator_type1   DRAW_COLOR_LINE
+#property indicator_color1  clrDodgerBlue,clrBrown
 #property indicator_style1  STYLE_SOLID
-#property indicator_width1  1
+#property indicator_width1  2
 //--- plot Central
 #property indicator_label2  "Central"
 #property indicator_type2   DRAW_COLOR_LINE
@@ -55,6 +55,7 @@ input uint                 InpChannelTop     =  20;            // Channel top si
 input uint                 InpChannelBottom  =  20;            // Channel bottom size
 //--- indicator buffers
 double         BufferRSI[];
+double         BufferRSIColors[];
 double         BufferCentral[];
 double         BufferColors[];
 double         BufferTop[];
@@ -66,6 +67,17 @@ int            period_rsi;
 int            period_ma;
 int            handle_rsi;
 int            weight_sum;
+int            subwindow_handle;
+
+//--- Global variables for pivot and breakout logic
+double lastPivotHighPrice = 0;
+datetime lastPivotHighTime = 0;
+bool pivotHighUsed = false;
+
+double lastPivotLowPrice = 0;
+datetime lastPivotLowTime = 0;
+bool pivotLowUsed = false;
+
 //--- includes
 #include <MovingAverages.mqh>
 //+------------------------------------------------------------------+
@@ -78,12 +90,24 @@ int OnInit()
    period_ma=int(InpPeriodMA<2 ? 2 : InpPeriodMA);
 //--- indicator buffers mapping
    SetIndexBuffer(0,BufferRSI,INDICATOR_DATA);
-   SetIndexBuffer(1,BufferCentral,INDICATOR_DATA);
-   SetIndexBuffer(2,BufferColors,INDICATOR_COLOR_INDEX);
-   SetIndexBuffer(3,BufferTop,INDICATOR_DATA);
-   SetIndexBuffer(4,BufferBottom,INDICATOR_DATA);
-   SetIndexBuffer(5,BufferArrowUP,INDICATOR_DATA);
-   SetIndexBuffer(6,BufferArrowDN,INDICATOR_DATA);
+   SetIndexBuffer(1,BufferRSIColors,INDICATOR_COLOR_INDEX);
+   SetIndexBuffer(2,BufferCentral,INDICATOR_DATA);
+   SetIndexBuffer(3,BufferColors,INDICATOR_COLOR_INDEX);
+   SetIndexBuffer(4,BufferTop,INDICATOR_DATA);
+   SetIndexBuffer(5,BufferBottom,INDICATOR_DATA);
+   SetIndexBuffer(6,BufferArrowUP,INDICATOR_DATA);
+   SetIndexBuffer(7,BufferArrowDN,INDICATOR_DATA);
+
+   subwindow_handle = ChartWindowFind();
+
+   //--- Initialize global variables
+   lastPivotHighPrice = 0;
+   lastPivotHighTime = 0;
+   pivotHighUsed = false;
+
+   lastPivotLowPrice = 0;
+   lastPivotLowTime = 0;
+   pivotLowUsed = false;
 //--- setting a code from the Wingdings charset as the property of PLOT_ARROW
    PlotIndexSetInteger(4,PLOT_ARROW,242);
    PlotIndexSetInteger(5,PLOT_ARROW,241);
@@ -94,6 +118,7 @@ int OnInit()
    IndicatorSetDouble(INDICATOR_MAXIMUM,100);
 //--- setting buffer arrays as timeseries
    ArraySetAsSeries(BufferRSI,true);
+   ArraySetAsSeries(BufferRSIColors,true);
    ArraySetAsSeries(BufferCentral,true);
    ArraySetAsSeries(BufferColors,true);
    ArraySetAsSeries(BufferTop,true);
@@ -111,6 +136,24 @@ int OnInit()
 //---
    return(INIT_SUCCEEDED);
   }
+//+------------------------------------------------------------------+
+//| Custom indicator deinitialization function                       |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   // Loop through all objects on the chart
+   int total = ObjectsTotal(0);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i);
+
+      // Remove only the objects created by this indicator
+      if(StringFind(name, "TarzanBreakout_") == 0)
+      {
+         ObjectDelete(0, name);
+      }
+   }
+}
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
@@ -154,6 +197,72 @@ int OnCalculate(const int rates_total,
 //--- Расчёт индикатора
    for(int i=limit; i>=0 && !IsStopped(); i--)
      {
+      // --- Draw the colored rsi line ---
+      if(i < rates_total-1)
+      {
+         if(BufferRSI[i] > BufferRSI[i+1])
+            BufferRSIColors[i] = 0; // Blue for up
+         else if(BufferRSI[i] < BufferRSI[i+1])
+            BufferRSIColors[i] = 1; // Brown for down
+         else
+            BufferRSIColors[i] = BufferRSIColors[i+1]; // Same color for flat
+      }
+      else
+      {
+         BufferRSIColors[i] = 0; // Default color
+      }
+      
+      // --- New breakout logic ---
+      if(i < rates_total-2)
+      {
+         bool isPivotHigh = BufferRSI[i] < BufferRSI[i+1] && BufferRSI[i+1] > BufferRSI[i+2];
+         bool isPivotLow = BufferRSI[i] > BufferRSI[i+1] && BufferRSI[i+1] < BufferRSI[i+2];
+
+         if (isPivotHigh)
+         {
+            lastPivotHighPrice = BufferRSI[i+1];
+            lastPivotHighTime = time[i+1];
+            pivotHighUsed = false;
+         }
+
+         if (isPivotLow)
+         {
+            lastPivotLowPrice = BufferRSI[i+1];
+            lastPivotLowTime = time[i+1];
+            pivotLowUsed = false;
+         }
+      }
+
+      // Breakout above pivot high
+      if(lastPivotHighPrice > 0 && !pivotHighUsed && BufferRSI[i] > lastPivotHighPrice)
+      {
+         string objName = "TarzanBreakout_" + (string)lastPivotHighTime + "_" + (string)time[i];
+         if(ObjectFind(0, objName) < 0)
+         {
+            ObjectCreate(0, objName, OBJ_TREND, subwindow_handle, lastPivotHighTime, lastPivotHighPrice, time[i], BufferRSI[i]);
+            ObjectSetInteger(0, objName, OBJPROP_COLOR, clrAqua);
+            ObjectSetInteger(0, objName, OBJPROP_WIDTH, 1);
+            ObjectSetInteger(0, objName, OBJPROP_STYLE, STYLE_DOT);
+            ObjectSetInteger(0, objName, OBJPROP_RAY_RIGHT, false);
+         }
+         pivotHighUsed = true; // Mark this pivot as used
+      }
+
+      // Breakout below pivot low
+      if(lastPivotLowPrice > 0 && !pivotLowUsed && BufferRSI[i] < lastPivotLowPrice)
+      {
+         string objName = "TarzanBreakout_" + (string)lastPivotLowTime + "_" + (string)time[i];
+         if(ObjectFind(0, objName) < 0)
+         {
+            ObjectCreate(0, objName, OBJ_TREND, subwindow_handle, lastPivotLowTime, lastPivotLowPrice, time[i], BufferRSI[i]);
+            ObjectSetInteger(0, objName, OBJPROP_COLOR, clrMagenta);
+            ObjectSetInteger(0, objName, OBJPROP_WIDTH, 1);
+            ObjectSetInteger(0, objName, OBJPROP_STYLE, STYLE_DOT);
+            ObjectSetInteger(0, objName, OBJPROP_RAY_RIGHT, false);
+         }
+         pivotLowUsed = true; // Mark this pivot as used
+      }
+      
       double MA=BufferCentral[i];
       double UP=(MA+InpChannelTop > 100 ? 100 : MA+InpChannelTop);
       double DN=(MA-InpChannelBottom < 0 ? 0 : MA-InpChannelBottom);
