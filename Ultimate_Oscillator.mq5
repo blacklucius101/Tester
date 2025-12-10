@@ -30,6 +30,16 @@ int       ExtFastATRhandle;
 int       ExtMiddleATRhandle;
 int       ExtSlowATRhandle;
 
+//--- Pivot and Breakout Variables
+datetime lastPivotHighTime=0;
+double   lastPivotHighValue=0;
+bool     isPivotHighBroken=false;
+
+datetime lastPivotLowTime=0;
+double   lastPivotLowValue=0;
+bool     isPivotLowBroken=false;
+//---
+
 double    ExtDivider;
 int       ExtMaxPeriod;
 //+------------------------------------------------------------------+
@@ -173,6 +183,72 @@ int OnCalculate(const int rates_total,
          ExtUOBuffer[i]=ExtUOBuffer[i-1]; // set current Ultimate value as previous Ultimate value
      }
 //--- OnCalculate done. Return new prev_calculated.
+   int start_breakout_bar;
+   if(prev_calculated == 0)
+      start_breakout_bar = InpSlowPeriod + 1;
+   else
+      start_breakout_bar = prev_calculated - 1;
+
+//--- Breakout detection logic starts here
+   for(int i = start_breakout_bar; i < rates_total; i++)
+     {
+      //--- Skip the most recent bars to avoid repainting pivots
+      if(i >= rates_total - 1)
+         continue;
+
+      //--- Pivot High Detection: Slope changes from up to down
+      if(ExtUOBuffer[i-1] < ExtUOBuffer[i] && ExtUOBuffer[i] > ExtUOBuffer[i+1])
+        {
+         lastPivotHighValue = ExtUOBuffer[i];
+         lastPivotHighTime = time[i];
+         isPivotHighBroken = false; // Reset breakout flag for the new pivot
+        }
+
+      //--- Pivot Low Detection: Slope changes from down to up
+      if(ExtUOBuffer[i-1] > ExtUOBuffer[i] && ExtUOBuffer[i] < ExtUOBuffer[i+1])
+        {
+         lastPivotLowValue = ExtUOBuffer[i];
+         lastPivotLowTime = time[i];
+         isPivotLowBroken = false; // Reset breakout flag for the new pivot
+        }
+
+      //--- Breakout Above Last Pivot High
+      if(lastPivotHighTime != 0 && !isPivotHighBroken && ExtUOBuffer[i] > lastPivotHighValue)
+        {
+         string object_name = "UO_Breakout_" + (string)lastPivotHighTime + "_" + (string)time[i];
+         if(ObjectFind(0, object_name) < 0)
+           {
+            ObjectCreate(0, object_name, OBJ_TREND, 0, lastPivotHighTime, lastPivotHighValue, time[i], ExtUOBuffer[i]);
+            ObjectSetInteger(0, object_name, OBJPROP_COLOR, clrAqua);
+            ObjectSetInteger(0, object_name, OBJPROP_STYLE, STYLE_DOT);
+            ObjectSetInteger(0, object_name, OBJPROP_WIDTH, 1);
+            ObjectSetInteger(0, object_name, OBJPROP_RAY_RIGHT, true);
+           }
+         isPivotHighBroken = true; // Mark pivot as used
+        }
+
+      //--- Breakout Below Last Pivot Low
+      if(lastPivotLowTime != 0 && !isPivotLowBroken && ExtUOBuffer[i] < lastPivotLowValue)
+        {
+         string object_name = "UO_Breakout_" + (string)lastPivotLowTime + "_" + (string)time[i];
+         if(ObjectFind(0, object_name) < 0)
+           {
+            ObjectCreate(0, object_name, OBJ_TREND, 0, lastPivotLowTime, lastPivotLowValue, time[i], ExtUOBuffer[i]);
+            ObjectSetInteger(0, object_name, OBJPROP_COLOR, clrMagenta);
+            ObjectSetInteger(0, object_name, OBJPROP_STYLE, STYLE_DOT);
+            ObjectSetInteger(0, object_name, OBJPROP_WIDTH, 1);
+            ObjectSetInteger(0, object_name, OBJPROP_RAY_RIGHT, true);
+           }
+         isPivotLowBroken = true; // Mark pivot as used
+        }
+     }
    return(rates_total);
+  }
+//+------------------------------------------------------------------+
+//| Indicator deinitialization function                              |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   ObjectsDeleteAll(0, "UO_Breakout_");
   }
 //+------------------------------------------------------------------+
