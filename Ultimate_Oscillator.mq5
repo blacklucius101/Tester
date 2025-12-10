@@ -1,4 +1,11 @@
 //+------------------------------------------------------------------+
+//| Indicator deinitialization function                              |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   ObjectsDeleteAll(0, subwindow_index, -1, "UO_Breakout_");
+  }
+//+------------------------------------------------------------------+
 //|                                          Ultimate_Oscillator.mq5 |
 //|                             Copyright 2000-2025, MetaQuotes Ltd. |
 //|                                             https://www.mql5.com |
@@ -40,6 +47,10 @@ double   lastPivotLowValue=0;
 bool     isPivotLowBroken=false;
 //---
 
+//--- Subwindow index for drawing
+int       subwindow_index = 0;
+//---
+
 double    ExtDivider;
 int       ExtMaxPeriod;
 //+------------------------------------------------------------------+
@@ -67,6 +78,14 @@ void OnInit()
 //--- name for DataWindow and indicator subwindow label
    string short_name=StringFormat("UOS(%d,%d,%d)",InpFastPeriod,InpMiddlePeriod,InpSlowPeriod);
    IndicatorSetString(INDICATOR_SHORTNAME,short_name);
+
+   //--- Find the indicator's subwindow
+   subwindow_index = ChartWindowFind();
+   if(subwindow_index < 0)
+     {
+      Print("Error finding indicator subwindow, objects will be drawn on the main chart.");
+      subwindow_index = 0; // Default to main chart on failure
+     }
 //--- get handles
    ExtFastATRhandle=iATR(Symbol(),0,InpFastPeriod);
    ExtMiddleATRhandle=iATR(Symbol(),0,InpMiddlePeriod);
@@ -218,7 +237,7 @@ int OnCalculate(const int rates_total,
          string object_name = "UO_Breakout_" + (string)lastPivotHighTime + "_" + (string)time[i];
          if(ObjectFind(0, object_name) < 0)
            {
-            ObjectCreate(0, object_name, OBJ_TREND, 0, lastPivotHighTime, lastPivotHighValue, time[i], ExtUOBuffer[i]);
+            ObjectCreate(0, object_name, OBJ_TREND, subwindow_index, lastPivotHighTime, lastPivotHighValue, time[i], ExtUOBuffer[i]);
             ObjectSetInteger(0, object_name, OBJPROP_COLOR, clrAqua);
             ObjectSetInteger(0, object_name, OBJPROP_STYLE, STYLE_DOT);
             ObjectSetInteger(0, object_name, OBJPROP_WIDTH, 1);
@@ -233,7 +252,7 @@ int OnCalculate(const int rates_total,
          string object_name = "UO_Breakout_" + (string)lastPivotLowTime + "_" + (string)time[i];
          if(ObjectFind(0, object_name) < 0)
            {
-            ObjectCreate(0, object_name, OBJ_TREND, 0, lastPivotLowTime, lastPivotLowValue, time[i], ExtUOBuffer[i]);
+            ObjectCreate(0, object_name, OBJ_TREND, subwindow_index, lastPivotLowTime, lastPivotLowValue, time[i], ExtUOBuffer[i]);
             ObjectSetInteger(0, object_name, OBJPROP_COLOR, clrMagenta);
             ObjectSetInteger(0, object_name, OBJPROP_STYLE, STYLE_DOT);
             ObjectSetInteger(0, object_name, OBJPROP_WIDTH, 1);
@@ -243,12 +262,5 @@ int OnCalculate(const int rates_total,
         }
      }
    return(rates_total);
-  }
-//+------------------------------------------------------------------+
-//| Indicator deinitialization function                              |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   ObjectsDeleteAll(0, "UO_Breakout_");
   }
 //+------------------------------------------------------------------+
