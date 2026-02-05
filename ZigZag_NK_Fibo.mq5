@@ -300,8 +300,6 @@ void OnDeinit(const int reason)
    ObjectDelete(0,"StaticFibo");
    ObjectsDeleteAll(0, "MS_High_");
    ObjectsDeleteAll(0, "MS_Low_");
-   ObjectsDeleteAll(0, "MS_HH_Text_");
-   ObjectsDeleteAll(0, "MS_LL_Text_");
 //----
   }
 //+------------------------------------------------------------------+ 
@@ -324,8 +322,6 @@ int OnCalculate(const int rates_total,
 //----
    ObjectsDeleteAll(0,"MS_High_");
    ObjectsDeleteAll(0,"MS_Low_");
-   ObjectsDeleteAll(0,"MS_HH_Text_");
-   ObjectsDeleteAll(0,"MS_LL_Text_");
 
 //---- declarations of local variables 
    int limit,climit,bar,back,lasthighpos,lastlowpos;
@@ -548,8 +544,6 @@ void DrawMarketStructureLines(const int rates_total, const datetime &time[])
     {
         ObjectsDeleteAll(0, "MS_High_");
         ObjectsDeleteAll(0, "MS_Low_");
-        ObjectsDeleteAll(0, "MS_HH_Text_");
-        ObjectsDeleteAll(0, "MS_LL_Text_");
         return;
     }
 
@@ -593,61 +587,18 @@ void DrawMarketStructureLines(const int rates_total, const datetime &time[])
         }
     }
 
-    int hh_count = 0;
     for(int i = 1; i < high_pivots_count; i++)
     {
         string name = "MS_High_" + (string)i;
-        bool is_hh = high_pivots_price[i-1] > high_pivots_price[i];
-        color line_color = is_hh ? HighLine_color_up : HighLine_color_down;
+        color line_color = high_pivots_price[i] > high_pivots_price[i-1] ? HighLine_color_down : HighLine_color_up;
         DrawTrendLine(name, high_pivots_time[i-1], high_pivots_price[i-1], high_pivots_time[i], high_pivots_price[i], line_color, HighLine_style, HighLine_width);
-
-        if(is_hh)
-        {
-            hh_count++;
-            string text_name = "MS_HH_Text_" + (string)hh_count;
-            double delta = (high_pivots_price[i-1] - high_pivots_price[i]) / _Point;
-            DrawPixelLabel(text_name, high_pivots_time[i-1], high_pivots_price[i-1], line_color, DoubleToString(delta, 0), ANCHOR_BOTTOM, -15);
-        }
     }
 
-    int ll_count = 0;
     for(int i = 1; i < low_pivots_count; i++)
     {
         string name = "MS_Low_" + (string)i;
-        bool is_ll = low_pivots_price[i-1] < low_pivots_price[i];
-        color line_color = is_ll ? LowLine_color_down : LowLine_color_up ;
+        color line_color = low_pivots_price[i] > low_pivots_price[i-1] ? LowLine_color_down : LowLine_color_up ;
         DrawTrendLine(name, low_pivots_time[i-1], low_pivots_price[i-1], low_pivots_time[i], low_pivots_price[i], line_color, LowLine_style, LowLine_width);
-
-        if(is_ll)
-        {
-            ll_count++;
-            string text_name = "MS_LL_Text_" + (string)ll_count;
-            double delta = (low_pivots_price[i] - low_pivots_price[i-1]) / _Point;
-            DrawPixelLabel(text_name, low_pivots_time[i-1], low_pivots_price[i-1], line_color, DoubleToString(delta, 0), ANCHOR_TOP, 15);
-        }
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Draw Pixel Label                                                 |
-//+------------------------------------------------------------------+
-void DrawPixelLabel(string name, datetime t, double p, color clr, string text, ENUM_ANCHOR_POINT anchor, int y_offset_pixels)
-{
-    int x, y;
-    if (ChartTimePriceToXY(0, 0, t, p, x, y))
-    {
-        y += y_offset_pixels;
-        double new_p;
-        datetime new_t;
-        int sub_win;
-        if (ChartXYToTimePrice(0, x, y, sub_win, new_t, new_p))
-        {
-             ObjectCreate(0, name, OBJ_TEXT, 0, new_t, new_p);
-             ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
-             ObjectSetString(0, name, OBJPROP_TEXT, text);
-             ObjectSetInteger(0, name, OBJPROP_ANCHOR, anchor);
-             ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
-        }
     }
 }
 
