@@ -1,4 +1,4 @@
-Consider `ZigZag NK Fibo.mq5`. Enhance the existing ZigZag / Market Structure logic so that only Higher Highs (HH) and Lower Lows (LL) display a numeric label showing the point difference from the previous corresponding pivot.
+Consider `ZigZag NK Fibo.mq5`. Use MQL5 code to enhance the existing ZigZag / Market Structure logic so that only Higher Highs (HH) and Lower Lows (LL) display a numeric label showing the point difference from the previous corresponding pivot.
 
 ## Functional Requirements
 1. HH / LL Detection
