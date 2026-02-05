@@ -13,11 +13,10 @@ Using the existing `ZigZag_NK_Fibo.mq5` indicator, display the point differences
 
 ## Suggested Steps:
 - After drawing each trend line in `DrawMarketStructureLines()`:
-1. Convert the midpoint of the trend line to pixel coordinates using `ChartTimePriceToXY()`.
-2. Apply the desired pixel offset in X and Y (e.g., 10 px above for highs, 10 px below for lows).
-3. Convert the adjusted pixel coordinates back to chart coordinates using `ChartXYToTimePrice()`.
-4. Use `CreateText()` or `SetText()` to draw the delta label at the new position.
-
+    1. Convert the midpoint of the trend line to pixel coordinates using `ChartTimePriceToXY()`.
+    2. Apply the desired pixel offset in X and Y (e.g., 10 px above for highs, 10 px below for lows).
+    3. Convert the adjusted pixel coordinates back to chart coordinates using `ChartXYToTimePrice()`.
+    4. Use `CreateText()` or `SetText()` to draw the delta label at the new position.
 - Ensure the label displays only the point difference with correct sign (positive/negative).
 - Optionally, format the delta to a fixed number of digits using `_Digits` or `NormalizeDouble()`.
 
