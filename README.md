@@ -1,29 +1,25 @@
-Consider `ZigZag NK Fibo.mq5`. Use MQL5 code to enhance the existing ZigZag / Market Structure logic so that only Higher Highs (HH) and Lower Lows (LL) display a numeric label showing the point difference from the previous corresponding pivot.
+## Objective:
+Using the existing `ZigZag_NK_Fibo.mq5` indicator, display the point differences between consecutive high pivots and consecutive low pivots without modifying the existing market structure lines.
 
-## Functional Requirements
-1. HH / LL Detection
-- A Higher High (HH) occurs when: `current_high > previous_high`
-- A Lower Low (LL) occurs when: `current_low < previous_low`
-- Do not display any measurement for:
-    - Lower Highs (LH)
-    - Higher Lows (HL)
+## Requirements:
+1. Preserve the current functionality and visual appearance of market structure lines.
+2. For each pair of consecutive high pivots:
+    - Compute `delta = high[i] - high[i-1]`.
+    - Display `delta` as a text label above the line, offset by a few pixels (e.g., 5–10 px) using `ChartTimePriceToXY` to get pixel coordinates and `ChartXYToTimePrice` to map back to chart coordinates.
+3. Repeat the same for low pivots, placing the label below the line with a small pixel offset.
+4.  Make sure the labels update dynamically when new bars are calculated or old bars are removed.
+5.  Labels should have a unique name, e.g., `"MS_HighDelta_1"`, `"MS_LowDelta_1"`, to avoid conflicts with the existing lines.
+6.  Keep all color, style, and width settings of lines unchanged.
 
-2. Point Difference Calculation
-- For HH: `delta_points = (current_high - previous_high) / _Point`
-- For LL: `delta_points = (previous_low - current_low) / _Point`
-- Display the value as an integer number of points (no decimals unless symbol precision requires it).
+## Suggested Steps:
+- After drawing each trend line in `DrawMarketStructureLines()`:
+1. Convert the midpoint of the trend line to pixel coordinates using `ChartTimePriceToXY()`.
+2. Apply the desired pixel offset in X and Y (e.g., 10 px above for highs, 10 px below for lows).
+3. Convert the adjusted pixel coordinates back to chart coordinates using `ChartXYToTimePrice()`.
+4. Use `CreateText()` or `SetText()` to draw the delta label at the new position.
 
-3. Text Object Creation
-- Use OBJ_TEXT for the labels.
-- One label per HH or LL pivot.
-- Naming convention:
-    - `MS_HH_Text_<index>`
-    - `MS_LL_Text_<index>`
-- Labels must be updated or recreated on recalculation, and removed on deinit.
+- Ensure the label displays only the point difference with correct sign (positive/negative).
+- Optionally, format the delta to a fixed number of digits using `_Digits` or `NormalizeDouble()`.
 
-4. Visual Anchoring (Pixel-Based)
-- The label must be visually anchored just beyond the pivot price, not at the exact price.
-- Use pixel offsets, not price offsets.
-- Directional behavior:
-    - HH → label slightly above the pivot
-    - LL → label slightly below the pivot
+## Outcome:
+On the chart, each market structure line between pivots will have a corresponding label showing the exact point difference, without touching the existing lines. The labels will follow the market structure lines dynamically as the chart updates.
