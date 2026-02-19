@@ -46,7 +46,8 @@ Requirements:
 - Do not modify arrow plots
 
 Visual rules:
-- Distinct color for High and Low lines
+- Color: Lime for High lines, Red for Low lines
+- Style: Dash
 
 ## PHASE 3 — Point Difference Calculation
 For each consecutive pair:
