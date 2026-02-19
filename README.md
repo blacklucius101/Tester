@@ -1,24 +1,92 @@
-## Objective:
-Using the existing `ZigZag_NK_Fibo.mq5` indicator, display the point differences between consecutive high pivots and consecutive low pivots without modifying the existing market structure lines.
+## OBJECTIVE
+Extend the existing indicator by:
+- Using Level 2 only (HighBuffer2, LowBuffer2)
+- Drawing market structure lines:
+    - High → previous High
+    - Low → previous Low
+- Displaying point differences between consecutive same-type swings
+- Not modifying or interfering with any existing semafor logic
+- Adding functionality only
 
-## Requirements:
-1. Preserve the current functionality and visual appearance of market structure lines.
-2. For each pair of consecutive high pivots:
-    - Compute `delta = high[i] - high[i-1]`.
-    - Display `delta` as a text label above the line, offset by a few pixels (e.g., 5–10 px) using `ChartTimePriceToXY` to get pixel coordinates and `ChartXYToTimePrice` to map back to chart coordinates.
-3. Repeat the same for low pivots, placing the label below the line with a small pixel offset.
-4.  Make sure the labels update dynamically when new bars are calculated or old bars are removed.
-5.  Labels should have a unique name, e.g., `"MS_HighDelta_1"`, `"MS_LowDelta_1"`, to avoid conflicts with the existing lines.
-6.  Keep all color, style, and width settings of lines unchanged.
+## PHASE 1 — Swing Extraction (Level 2 Only)
+Add a swing extraction layer that scans only:
+- HighBuffer2
+- LowBuffer2
+Requirements:
+- Ignore Level 1 and Level 3 buffers completely
+- Do not modify any existing buffer logic
+- Identify confirmed swings where buffer value != 0
+- Build two arrays:
+    - HighSwings[]
+    - LowSwings[]
+- Each swing must store:
+    - Bar index
+    - Time
+    - Price
+Swings must be ordered chronologically (oldest → newest).
+No drawing yet.
 
-## Suggested Steps:
-- After drawing each trend line in `DrawMarketStructureLines()`:
-    1. Convert the midpoint of the trend line to pixel coordinates using `ChartTimePriceToXY()`.
-    2. Apply the desired pixel offset in X and Y (e.g., 10 px above for highs, 10 px below for lows).
-    3. Convert the adjusted pixel coordinates back to chart coordinates using `ChartXYToTimePrice()`.
-    4. Use `CreateText()` or `SetText()` to draw the delta label at the new position.
-- Ensure the label displays only the point difference with correct sign (positive/negative).
-- Optionally, format the delta to a fixed number of digits using `_Digits` or `NormalizeDouble()`.
+## PHASE 2 — Structure Line Engine
+Using HighSwings[] and LowSwings[]:
+Draw market structure lines:
+- Connect each High to the previous High
+- Connect each Low to the previous Low
+- Never connect High to Low
+Requirements:
+- Use OBJ_TREND objects
+- No ray extension
+- Object name prefixes:
+    - "MS_H_"
+    - "MS_L_"
+- Each connection must have unique name index
+- Do not modify arrow plots
+Visual rules:
+- Distinct color for High and Low lines
 
-## Outcome:
-On the chart, each market structure line between pivots will have a corresponding label showing the exact point difference, without touching the existing lines. The labels will follow the market structure lines dynamically as the chart updates.
+## PHASE 3 — Point Difference Calculation
+For each consecutive pair:
+Calculate:
+`Points = abs(CurrentPrice - PreviousPrice) / _Point`
+Requirements:
+- Store as integer
+- Format as: "Δ XXX pts"
+- Calculation must occur before drawing label
+
+## PHASE 4 — Label Rendering
+For every structure line:
+Create a text label showing point difference.
+Requirements:
+- Use OBJ_TEXT
+- Position at midpoint of the line
+- High connections: Place slightly above midpoint
+- Low connections: Place slightly below midpoint
+- Object name prefixes:
+    - "MS_H_TXT_"
+    - "MS_L_TXT_"
+- Text color matches line color
+- Small readable font
+Do not interfere with arrows.
+
+## PHASE 5 — Safe Object Lifecycle Management
+ZigZag repaints — structure must rebuild safely.
+At the beginning of OnCalculate:
+- Delete all objects whose names start with:
+    - "MS_H_"
+    - "MS_L_"
+Requirements:
+- Do not delete other chart objects
+- Rebuild structure fresh each recalculation
+- Keep logic isolated from buffer calculations
+This guarantees stability.
+
+## PHASE 6 — Repaint Stability Filter
+Optional but recommended.
+Add stability rule:
+- Ignore the most recent swing (last array element)
+- Only connect fully confirmed swings
+This prevents flickering lines during live formation.
+
+## PHASE 7 — Performance Guard
+Ensure structure rebuilding only runs when:
+- prev_calculated < rates_total
+Avoid unnecessary full historical redraw on every tick.
