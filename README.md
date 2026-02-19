@@ -8,7 +8,8 @@ Extend the existing indicator by:
 - Not modifying or interfering with any existing semafor logic
 - Adding functionality only
 
-## PHASE 1 — Swing Extraction (Level 2 Only)
+## DEVELOPMENT PASS 1 — Core Feature Build
+### PHASE 1 — Swing Extraction (Level 2 Only)
 Add a swing extraction layer that scans only:
 - HighBuffer2
 - LowBuffer2
@@ -79,14 +80,16 @@ Requirements:
 - Keep logic isolated from buffer calculations
 This guarantees stability.
 
-## PHASE 6 — Repaint Stability Filter
+## DEVELOPMENT PASS 2 — Stability Layer
+### PHASE 6 — Repaint Stability Filter
 Optional but recommended.
 Add stability rule:
 - Ignore the most recent swing (last array element)
 - Only connect fully confirmed swings
 This prevents flickering lines during live formation.
 
-## PHASE 7 — Performance Guard
+## DEVELOPMENT PASS 3 — Performance Optimization
+### PHASE 7 — Performance Guard
 Ensure structure rebuilding only runs when:
 - prev_calculated < rates_total
 Avoid unnecessary full historical redraw on every tick.
