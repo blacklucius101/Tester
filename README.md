@@ -92,19 +92,3 @@ Requirements:
 
 This guarantees stability.
 
-## DEVELOPMENT PASS 2 — Stability Layer
-### PHASE 6 — Repaint Stability Filter
-Optional but recommended.
-
-Add stability rule:
-- Ignore the most recent swing (last array element)
-- Only connect fully confirmed swings
-
-This prevents flickering lines during live formation.
-
-## DEVELOPMENT PASS 3 — Performance Optimization
-### PHASE 7 — Performance Guard
-Ensure structure rebuilding only runs when:
-- prev_calculated < rates_total
-
-Avoid unnecessary full historical redraw on every tick.
