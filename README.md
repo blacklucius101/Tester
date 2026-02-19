@@ -13,6 +13,7 @@ Extend the existing indicator by:
 Add a swing extraction layer that scans only:
 - HighBuffer2
 - LowBuffer2
+
 Requirements:
 - Ignore Level 1 and Level 3 buffers completely
 - Do not modify any existing buffer logic
@@ -24,6 +25,7 @@ Requirements:
     - Bar index
     - Time
     - Price
+
 Swings must be ordered chronologically (oldest → newest).
 No drawing yet.
 
@@ -33,6 +35,7 @@ Draw market structure lines:
 - Connect each High to the previous High
 - Connect each Low to the previous Low
 - Never connect High to Low
+
 Requirements:
 - Use OBJ_TREND objects
 - No ray extension
@@ -41,13 +44,16 @@ Requirements:
     - "MS_L_"
 - Each connection must have unique name index
 - Do not modify arrow plots
+
 Visual rules:
 - Distinct color for High and Low lines
 
 ## PHASE 3 — Point Difference Calculation
 For each consecutive pair:
+
 Calculate:
 `Points = abs(CurrentPrice - PreviousPrice) / _Point`
+
 Requirements:
 - Store as integer
 - Format as: "Δ XXX pts"
@@ -56,6 +62,7 @@ Requirements:
 ## PHASE 4 — Label Rendering
 For every structure line:
 Create a text label showing point difference.
+
 Requirements:
 - Use OBJ_TEXT
 - Position at midpoint of the line
@@ -66,30 +73,37 @@ Requirements:
     - "MS_L_TXT_"
 - Text color matches line color
 - Small readable font
+
 Do not interfere with arrows.
 
 ## PHASE 5 — Safe Object Lifecycle Management
 ZigZag repaints — structure must rebuild safely.
+
 At the beginning of OnCalculate:
 - Delete all objects whose names start with:
     - "MS_H_"
     - "MS_L_"
+
 Requirements:
 - Do not delete other chart objects
 - Rebuild structure fresh each recalculation
 - Keep logic isolated from buffer calculations
+
 This guarantees stability.
 
 ## DEVELOPMENT PASS 2 — Stability Layer
 ### PHASE 6 — Repaint Stability Filter
 Optional but recommended.
+
 Add stability rule:
 - Ignore the most recent swing (last array element)
 - Only connect fully confirmed swings
+
 This prevents flickering lines during live formation.
 
 ## DEVELOPMENT PASS 3 — Performance Optimization
 ### PHASE 7 — Performance Guard
 Ensure structure rebuilding only runs when:
 - prev_calculated < rates_total
+
 Avoid unnecessary full historical redraw on every tick.
