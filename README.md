@@ -1,94 +1,31 @@
-## OBJECTIVE
-Extend the existing indicator by:
-- Using Level 2 only (HighBuffer2, LowBuffer2)
-- Drawing market structure lines:
-    - High → previous High
-    - Low → previous Low
-- Displaying point differences between consecutive same-type swings
-- Not modifying or interfering with any existing semafor logic
-- Adding functionality only
+## Goal:
+The logic of the `3_Level_ZZ_Semafor.mq5` indicator is correct and must remain unchanged, but the current implementation is inefficient and causes performance issues due to full-history recalculation and repeated object deletion/recreation.
 
-## DEVELOPMENT PASS 1 — Core Feature Build
-### PHASE 1 — Swing Extraction (Level 2 Only)
-Add a swing extraction layer that scans only:
-- HighBuffer2
-- LowBuffer2
+Refactor the structure drawing engine to operate in an incremental, event-driven manner with near O(1) processing per new swing, instead of O(n) per tick.
 
-Requirements:
-- Ignore Level 1 and Level 3 buffers completely
-- Do not modify any existing buffer logic
-- Identify confirmed swings where buffer value != 0
-- Build two arrays:
-    - HighSwings[]
-    - LowSwings[]
-- Each swing must store:
-    - Bar index
-    - Time
-    - Price
+Apply the architectural optimizations while keeping the functional logic identical.
 
-Swings must be ordered chronologically (oldest → newest).
-No drawing yet.
+## Optimization Requirements:
+1. Eliminate full-history recalculation on every tick.
+- Use incremental processing based on prev_calculated.
+- Only process newly formed bars or newly confirmed ZigZag swings.
 
-## PHASE 2 — Structure Line Engine
-Using HighSwings[] and LowSwings[]:
-Draw market structure lines:
-- Connect each High to the previous High
-- Connect each Low to the previous Low
-- Never connect High to Low
+2. Stop deleting and recreating all chart objects on every calculation.
+- Objects should only be created when a new swing is confirmed.
+- Existing objects should be updated (moved/modified) only if the latest swing repaints.
 
-Requirements:
-- Use OBJ_TREND objects
-- No ray extension
-- Object name prefixes:
-    - "MS_H_"
-    - "MS_L_"
-- Each connection must have unique name index
-- Do not modify arrow plots
+3. Remove unnecessary full-array resizing to rates_total.
+- Store only confirmed swings in compact dynamic arrays.
 
-Visual rules:
-- Color: Lime for High lines, Red for Low lines
-- Style: Dash
+4. Avoid copying full historical buffers repeatedly.
+- Copy only the minimal required recent data after the first calculation.
 
-## PHASE 3 — Point Difference Calculation
-For each consecutive pair:
+5. Eliminate unnecessary calls like CopyTime() if equivalent data is already available in OnCalculate.
 
-Calculate:
-`Points = abs(CurrentPrice - PreviousPrice) / _Point`
+6. Ensure no redundant object property updates occur if nothing has changed.
 
-Requirements:
-- Store as integer
-- Format as: "Δ XXX pts"
-- Calculation must occur before drawing label
-
-## PHASE 4 — Label Rendering
-For every structure line:
-Create a text label showing point difference.
-
-Requirements:
-- Use OBJ_TEXT
-- Position at midpoint of the line
-- High connections: Place slightly above midpoint
-- Low connections: Place slightly below midpoint
-- Object name prefixes:
-    - "MS_H_TXT_"
-    - "MS_L_TXT_"
-- Text color matches line color
-- Small readable font
-
-Do not interfere with arrows.
-
-## PHASE 5 — Safe Object Lifecycle Management
-ZigZag repaints — structure must rebuild safely.
-
-At the beginning of OnCalculate:
-- Delete all objects whose names start with:
-    - "MS_H_"
-    - "MS_L_"
-
-Requirements:
-- Do not delete other chart objects
-- Rebuild structure fresh each recalculation
-- Keep logic isolated from buffer calculations
-
-This guarantees stability.
-
+7. Preserve:
+- Exact visual output
+- Same line connections
+- Same slope color logic
+- Same label text, but remove the pixel offset feature
