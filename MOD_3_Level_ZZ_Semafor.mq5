@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                       MOD_3_Level_ZZ_Semafor.mq5 |
+//|                                           3_Level_ZZ_Semafor.mq5 |
 //|                                      Copyright 2000, asystem2000 |
 //|                                            asystem2000@yandex.ru |
 //+------------------------------------------------------------------+
@@ -387,13 +387,6 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
       string txtName = "MS_L_TXT_" + IntegerToString(LowSwings[i].barIndex);
       datetime midTime = (datetime)(((long)LowSwings[i-1].time + (long)LowSwings[i].time) / 2);
       double midPrice = (LowSwings[i-1].price + LowSwings[i].price) / 2.0;
-
-      int x, y;
-      if(ChartTimePriceToXY(0, 0, midTime, midPrice, x, y))
-        {
-         y += 20;
-         ChartXYToTimePrice(0, 0, x, y, midTime, midPrice);
-        }
 
       ObjectCreate(0, txtName, OBJ_TEXT, 0, midTime, midPrice);
       ObjectSetString(0, txtName, OBJPROP_TEXT, "Δ " + IntegerToString(points) + " pts");
