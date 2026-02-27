@@ -102,25 +102,12 @@ input int Backstep3=12;
 input int HighSymbol3=163;
 input int LowSymbol3=163;
 input int PixelOffset=-8; // Offset for arrows in pixels
-
-//+------------------------------------------------------------------+
-//|  Market Structure Structures                                     |
-//+------------------------------------------------------------------+
-struct SwingInfo
-  {
-   int               barIndex;
-   datetime          time;
-   double            price;
-  };
-
 //+----------------------------------------------+
 //---- declaration of dynamic arrays that
 // will be used as indicator buffers
 double HighBuffer1[],LowBuffer1[];
 double HighBuffer2[],LowBuffer2[];
 double HighBuffer3[],LowBuffer3[];
-//---- market structure swing storage
-SwingInfo HighSwings[],LowSwings[];
 //---- declaration of the integer variables for the start of data calculation
 int StartBar1,StartBar2,StartBar3,StartBar;
 //---- declaration of variables for storing indicators handles
@@ -236,21 +223,6 @@ void OnInit()
 //----
   }
 //+------------------------------------------------------------------+
-//| Custom indicator deinitialization function                       |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   DeleteObjectsByPrefix("MS_H_");
-   DeleteObjectsByPrefix("MS_L_");
-  }
-//+------------------------------------------------------------------+
-//| Deletes objects by prefix                                        |
-//+------------------------------------------------------------------+
-void DeleteObjectsByPrefix(string prefix)
-  {
-   ObjectsDeleteAll(0, prefix);
-  }
-//+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,    // number of bars in history at the current tick
@@ -293,116 +265,7 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
    if(CopyBuffer(Handle2,2,0,to_copy2,LowBuffer2)<=0) return(0);
    if(CopyBuffer(Handle3,1,0,to_copy3,HighBuffer3)<=0) return(0);
    if(CopyBuffer(Handle3,2,0,to_copy3,LowBuffer3)<=0) return(0);
-
-//--- Market Structure Engine ---
-   DeleteObjectsByPrefix("MS_H_");
-   DeleteObjectsByPrefix("MS_L_");
-
-//--- Extraction
-   if(ArraySize(HighSwings) != rates_total)
-     {
-      ArrayResize(HighSwings, rates_total);
-      ArrayResize(LowSwings, rates_total);
-     }
-
-   datetime times[];
-   if(CopyTime(_Symbol, _Period, 0, rates_total, times) <= 0) return(rates_total);
-   ArraySetAsSeries(times, true);
-
-   int hCount = 0, lCount = 0;
-
-   // Process chronologically (from oldest to newest)
-   for(int i = rates_total - 1; i >= 0; i--)
-     {
-      if(HighBuffer2[i] > 0.0)
-        {
-         HighSwings[hCount].time = times[i];
-         HighSwings[hCount].price = HighBuffer2[i];
-         HighSwings[hCount].barIndex = i; // Using series index for unique naming
-         hCount++;
-        }
-      if(LowBuffer2[i] > 0.0)
-        {
-         LowSwings[lCount].time = times[i];
-         LowSwings[lCount].price = LowBuffer2[i];
-         LowSwings[lCount].barIndex = i;
-         lCount++;
-        }
-     }
-
-//--- Draw High Structure
-   for(int i = 1; i < hCount; i++)
-     {
-      string name = "MS_H_" + IntegerToString(HighSwings[i].barIndex);
-      ObjectCreate(0, name, OBJ_TREND, 0, HighSwings[i-1].time, HighSwings[i-1].price, HighSwings[i].time, HighSwings[i].price);
-      color lineColor;
-
-      // Determine slope direction
-      if(HighSwings[i].price > HighSwings[i-1].price)
-         lineColor = clrLime;     // Rising
-      else
-         lineColor = clrRed;      // Falling
-
-      ObjectSetInteger(0, name, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
-      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-
-      // Label
-      int points = (int)MathRound(MathAbs(HighSwings[i].price - HighSwings[i-1].price) / _Point);
-      string txtName = "MS_H_TXT_" + IntegerToString(HighSwings[i].barIndex);
-      datetime midTime = (datetime)(((long)HighSwings[i-1].time + (long)HighSwings[i].time) / 2);
-      double midPrice = (HighSwings[i-1].price + HighSwings[i].price) / 2.0;
-
-      ObjectCreate(0, txtName, OBJ_TEXT, 0, midTime, midPrice);
-      ObjectSetString(0, txtName, OBJPROP_TEXT, "Δ " + IntegerToString(points) + " pts");
-      ObjectSetInteger(0, txtName, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 8);
-      ObjectSetInteger(0, txtName, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
-      ObjectSetInteger(0, txtName, OBJPROP_SELECTABLE, false);
-     }
-
-//--- Draw Low Structure
-   for(int i = 1; i < lCount; i++)
-     {
-      string name = "MS_L_" + IntegerToString(LowSwings[i].barIndex);
-      ObjectCreate(0, name, OBJ_TREND, 0, LowSwings[i-1].time, LowSwings[i-1].price, LowSwings[i].time, LowSwings[i].price);
-      color lineColor;
-
-      // Determine slope direction
-      if(LowSwings[i].price > LowSwings[i-1].price)
-         lineColor = clrLime;     // Rising
-      else
-         lineColor = clrRed;      // Falling
-
-      ObjectSetInteger(0, name, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
-      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-
-      // Label
-      int points = (int)MathRound(MathAbs(LowSwings[i].price - LowSwings[i-1].price) / _Point);
-      string txtName = "MS_L_TXT_" + IntegerToString(LowSwings[i].barIndex);
-      datetime midTime = (datetime)(((long)LowSwings[i-1].time + (long)LowSwings[i].time) / 2);
-      double midPrice = (LowSwings[i-1].price + LowSwings[i].price) / 2.0;
-
-      int x, y;
-      if(ChartTimePriceToXY(0, 0, midTime, midPrice, x, y))
-        {
-         y += 20;
-         ChartXYToTimePrice(0, 0, x, y, midTime, midPrice);
-        }
-
-      ObjectCreate(0, txtName, OBJ_TEXT, 0, midTime, midPrice);
-      ObjectSetString(0, txtName, OBJPROP_TEXT, "Δ " + IntegerToString(points) + " pts");
-      ObjectSetInteger(0, txtName, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 8);
-      ObjectSetInteger(0, txtName, OBJPROP_ANCHOR, ANCHOR_TOP);
-      ObjectSetInteger(0, txtName, OBJPROP_SELECTABLE, false);
-     }
-
+//----     
    return(rates_total);
   }
 //+------------------------------------------------------------------+
