@@ -1,6 +1,6 @@
-// this does not work!
+// this does not work: structure lines are not displayed!
 //+------------------------------------------------------------------+
-//|                                       MOD_3_Level_ZZ_Semafor.mq5 |
+//|                                       3_Level_ZZ_Semafor_MS.mq5 |
 //|                                      Copyright 2000, asystem2000 |
 //|                                            asystem2000@yandex.ru |
 //+------------------------------------------------------------------+
@@ -141,6 +141,10 @@ double MSLowBuffer[],MSLowColorBuffer[];
 int StartBar1,StartBar2,StartBar3,StartBar;
 //---- declaration of variables for storing indicators handles
 int Handle1,Handle2,Handle3;
+//---- Market Structure tracking
+int last_h_idx=-1, prev_h_idx=-1;
+int last_l_idx=-1, prev_l_idx=-1;
+int last_rates_total=0;
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+  
@@ -160,14 +164,8 @@ void OnInit()
    PlotIndexSetString(0,PLOT_LABEL,"Low1");
 //---- indicator symbol
    PlotIndexSetInteger(0,PLOT_ARROW,LowSymbol1);
-//---- set dynamic array as an indicator buffer
-   SetIndexBuffer(0,LowBuffer1,INDICATOR_DATA);
-//---- shifting the start of drawing of the indicator 1
-   PlotIndexSetInteger(0,PLOT_DRAW_BEGIN,0);
-//---- create a label to display in DataWindow
-   PlotIndexSetString(0,PLOT_LABEL,"Low1");
-//---- indicator symbol
-   PlotIndexSetInteger(0,PLOT_ARROW,LowSymbol1);
+//---- indexing elements in the buffer as timeseries
+   ArraySetAsSeries(LowBuffer1,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(1,HighBuffer1,INDICATOR_DATA);
@@ -177,6 +175,8 @@ void OnInit()
    PlotIndexSetString(1,PLOT_LABEL,"High1");
 //---- indicator symbol
    PlotIndexSetInteger(1,PLOT_ARROW,HighSymbol1);
+//---- indexing elements in the buffer as timeseries
+   ArraySetAsSeries(HighBuffer1,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(2,LowBuffer2,INDICATOR_DATA);
@@ -186,6 +186,8 @@ void OnInit()
    PlotIndexSetString(2,PLOT_LABEL,"Low2");
 //---- indicator symbol
    PlotIndexSetInteger(2,PLOT_ARROW,LowSymbol2);
+//---- indexing elements in the buffer as timeseries
+   ArraySetAsSeries(LowBuffer2,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(3,HighBuffer2,INDICATOR_DATA);
@@ -195,6 +197,8 @@ void OnInit()
    PlotIndexSetString(3,PLOT_LABEL,"High2");
 //---- indicator symbol
    PlotIndexSetInteger(3,PLOT_ARROW,HighSymbol2);
+//---- indexing elements in the buffer as timeseries
+   ArraySetAsSeries(HighBuffer2,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(4,LowBuffer3,INDICATOR_DATA);
@@ -204,6 +208,8 @@ void OnInit()
    PlotIndexSetString(4,PLOT_LABEL,"Low3");
 //---- indicator symbol
    PlotIndexSetInteger(4,PLOT_ARROW,LowSymbol3);
+//---- indexing elements in the buffer as timeseries
+   ArraySetAsSeries(LowBuffer3,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(5,HighBuffer3,INDICATOR_DATA);
@@ -213,6 +219,8 @@ void OnInit()
    PlotIndexSetString(5,PLOT_LABEL,"High3");
 //---- indicator symbol
    PlotIndexSetInteger(5,PLOT_ARROW,HighSymbol3);
+//---- indexing elements in the buffer as timeseries
+   ArraySetAsSeries(HighBuffer3,true);
 
 //---- Set colors for different levels (lighter for level 1, darker for higher levels)
    PlotIndexSetInteger(0, PLOT_LINE_COLOR, clrDarkBlue);      // Level 1 Bullish - Light
@@ -230,15 +238,22 @@ void OnInit()
    PlotIndexSetInteger(4,PLOT_ARROW_SHIFT,-PixelOffset); // Low 3
    PlotIndexSetInteger(5,PLOT_ARROW_SHIFT,PixelOffset);  // High 3
 
-//---- High Structure
+//---- set dynamic array as an indicator buffer
    SetIndexBuffer(6,MSHighBuffer,INDICATOR_DATA);
-   SetIndexBuffer(7,MSHighColorBuffer,INDICATOR_COLOR_INDEX);
    PlotIndexSetInteger(6,PLOT_DRAW_BEGIN,StartBar2);
+   PlotIndexSetString(6,PLOT_LABEL,"High Structure");
+   ArraySetAsSeries(MSHighBuffer,true);
 
-//---- Low Structure
+   SetIndexBuffer(7,MSHighColorBuffer,INDICATOR_COLOR_INDEX);
+   ArraySetAsSeries(MSHighColorBuffer,true);
+
    SetIndexBuffer(8,MSLowBuffer,INDICATOR_DATA);
-   SetIndexBuffer(9,MSLowColorBuffer,INDICATOR_COLOR_INDEX);
    PlotIndexSetInteger(7,PLOT_DRAW_BEGIN,StartBar2);
+   PlotIndexSetString(7,PLOT_LABEL,"Low Structure");
+   ArraySetAsSeries(MSLowBuffer,true);
+
+   SetIndexBuffer(9,MSLowColorBuffer,INDICATOR_COLOR_INDEX);
+   ArraySetAsSeries(MSLowColorBuffer,true);
 
 //---- initializations of a variable for the indicator short name
 //---- creating a name for displaying in a separate sub-window and in a tooltip
@@ -256,48 +271,6 @@ void OnInit()
    Handle3=iCustom(NULL,0,"Examples\\ZigZag",Period3,Deviation3,Backstep3);
    if(Handle3==INVALID_HANDLE) Print(" Failed to get handle of the ZigZag3 indicator");
 //----
-  }
-//+------------------------------------------------------------------+
-//| Custom indicator deinitialization function                       |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   ObjectsDeleteAll(0,"MS_LBL_");
-  }
-//+------------------------------------------------------------------+
-//| Helper to manage labels                                          |
-//+------------------------------------------------------------------+
-void ManageLabel(string type,int bar_idx,datetime bar_time,double price,double prev_price,color clr)
-  {
-   string name="MS_LBL_"+type+"_"+TimeToString(bar_time);
-   if(price<=0)
-     {
-      if(ObjectFind(0,name)>=0) ObjectDelete(0,name);
-      return;
-     }
-
-   int delta=(int)MathRound(MathAbs(price-prev_price)/_Point);
-   string text="Δ "+IntegerToString(delta)+" pts";
-
-   if(ObjectFind(0,name)<0)
-     {
-      ObjectCreate(0,name,OBJ_TEXT,0,bar_time,price);
-      ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
-      ObjectSetString(0,name,OBJPROP_TEXT,text);
-      ObjectSetInteger(0,name,OBJPROP_FONTSIZE,8);
-      ObjectSetInteger(0,name,OBJPROP_ANCHOR,(type=="H" ? ANCHOR_BOTTOM : ANCHOR_TOP));
-     }
-   else
-     {
-      if(ObjectGetDouble(0,name,OBJPROP_PRICE)!=price || 
-         ObjectGetString(0,name,OBJPROP_TEXT)!=text ||
-         ObjectGetInteger(0,name,OBJPROP_COLOR)!=clr)
-        {
-         ObjectMove(0,name,0,bar_time,price);
-         ObjectSetString(0,name,OBJPROP_TEXT,text);
-         ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
-        }
-     }
   }
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
@@ -318,7 +291,6 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
 
 //---- declarations of local variables 
    int limit,to_copy1,to_copy2,to_copy3;
-   static double t_h1[], t_l1[], t_h2[], t_l2[], t_h3[], t_l3[];
 
 //---- calculation of the 'first' starting index for the bars recalculation loop
    if(prev_calculated>rates_total || prev_calculated<=0) // checking for the first start of calculation of an indicator
@@ -327,91 +299,123 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
       to_copy1=rates_total;
       to_copy2=rates_total;
       to_copy3=rates_total;
+
+      last_h_idx = -1; prev_h_idx = -1;
+      last_l_idx = -1; prev_l_idx = -1;
+      ArrayInitialize(MSHighBuffer, EMPTY_VALUE);
+      ArrayInitialize(MSHighColorBuffer, EMPTY_VALUE);
+      ArrayInitialize(MSLowBuffer, EMPTY_VALUE);
+      ArrayInitialize(MSLowColorBuffer, EMPTY_VALUE);
      }
    else
      {
       limit=rates_total-prev_calculated;
-      to_copy1=limit+StartBar1;
-      to_copy2=limit+StartBar2;
-      to_copy3=limit+StartBar3;
+      to_copy1=MathMax(limit+StartBar1, 500);
+      to_copy2=MathMax(limit+StartBar2, 500);
+      to_copy3=MathMax(limit+StartBar3, 500);
+
+      int diff = rates_total - last_rates_total;
+      if(diff > 0)
+        {
+         if(last_h_idx != -1) last_h_idx += diff;
+         if(prev_h_idx != -1) prev_h_idx += diff;
+         if(last_l_idx != -1) last_l_idx += diff;
+         if(prev_l_idx != -1) prev_l_idx += diff;
+        }
      }
+   last_rates_total = rates_total;
 
-//---- copy data to temporary buffers
-   if(CopyBuffer(Handle1,1,0,to_copy1,t_h1)<=0) return(0);
-   if(CopyBuffer(Handle1,2,0,to_copy1,t_l1)<=0) return(0);
-   int c2 = CopyBuffer(Handle2,1,0,to_copy2,t_h2);
-   if(c2<=0) return(0);
-   if(CopyBuffer(Handle2,2,0,to_copy2,t_l2)<=0) return(0);
-   if(CopyBuffer(Handle3,1,0,to_copy3,t_h3)<=0) return(0);
-   if(CopyBuffer(Handle3,2,0,to_copy3,t_l3)<=0) return(0);
+//---- copy the newly appeared data in the indicator buffers
+   if(CopyBuffer(Handle1,1,0,to_copy1,HighBuffer1)<=0) return(0);
+   if(CopyBuffer(Handle1,2,0,to_copy1,LowBuffer1)<=0) return(0);
+   if(CopyBuffer(Handle2,1,0,to_copy2,HighBuffer2)<=0) return(0);
+   if(CopyBuffer(Handle2,2,0,to_copy2,LowBuffer2)<=0) return(0);
+   if(CopyBuffer(Handle3,1,0,to_copy3,HighBuffer3)<=0) return(0);
+   if(CopyBuffer(Handle3,2,0,to_copy3,LowBuffer3)<=0) return(0);
 
-//---- map to indicator buffers (0 is oldest, rates_total-1 is newest)
-   for(int i=0; i<to_copy1; i++) { HighBuffer1[rates_total-1-i] = t_h1[i]; LowBuffer1[rates_total-1-i] = t_l1[i]; }
-   for(int i=0; i<to_copy2; i++) { HighBuffer2[rates_total-1-i] = t_h2[i]; LowBuffer2[rates_total-1-i] = t_l2[i]; }
-   for(int i=0; i<to_copy3; i++) { HighBuffer3[rates_total-1-i] = t_h3[i]; LowBuffer3[rates_total-1-i] = t_l3[i]; }
-
-//---- Market Structure Logic (Optimized O(N))
-   int start = (prev_calculated <= 0) ? StartBar : rates_total - to_copy2;
-   
-   // High Structure
-   double last_h = 0;
-   for(int i=start-1; i>=0; i--) { if(MSHighBuffer[i] > 0 && MSHighBuffer[i] < EMPTY_VALUE) { last_h = MSHighBuffer[i]; break; } }
-   
-   for(int i=start; i<rates_total; i++)
+//---- Market Structure
+   if(prev_calculated <= 0)
      {
-      double val = HighBuffer2[i];
-      if(val > 0 && val < EMPTY_VALUE)
+      int p_h = -1, p_l = -1;
+      for(int i = rates_total - 1; i >= 0; i--)
         {
-         MSHighBuffer[i] = val;
-         if(last_h > 0)
+         double val_h = HighBuffer2[i];
+         if(val_h > 0 && val_h < EMPTY_VALUE)
            {
-            MSHighColorBuffer[i] = (val > last_h) ? 0 : 1;
-            ManageLabel("H", i, time[i], val, last_h, (MSHighColorBuffer[i]==0?clrGreen:clrRed));
+            MSHighBuffer[i] = val_h;
+            if(p_h != -1) MSHighColorBuffer[i] = (val_h > HighBuffer2[p_h]) ? 0 : 1;
+            prev_h_idx = p_h;
+            last_h_idx = i;
+            p_h = i;
            }
-         else
+         double val_l = LowBuffer2[i];
+         if(val_l > 0 && val_l < EMPTY_VALUE)
            {
-            MSHighColorBuffer[i] = 0;
-            ManageLabel("H", i, time[i], val, val, clrGreen);
+            MSLowBuffer[i] = val_l;
+            if(p_l != -1) MSLowColorBuffer[i] = (val_l > LowBuffer2[p_l]) ? 0 : 1;
+            prev_l_idx = p_l;
+            last_l_idx = i;
+            p_l = i;
            }
-         last_h = val;
-        }
-      else
-        {
-         MSHighBuffer[i] = EMPTY_VALUE;
-         MSHighColorBuffer[i] = EMPTY_VALUE;
-         ManageLabel("H", i, time[i], 0, 0, CLR_NONE);
         }
      }
-
-   // Low Structure
-   double last_l = 0;
-   for(int i=start-1; i>=0; i--) { if(MSLowBuffer[i] > 0 && MSLowBuffer[i] < EMPTY_VALUE) { last_l = MSLowBuffer[i]; break; } }
-
-   for(int i=start; i<rates_total; i++)
+   else
      {
-      double val = LowBuffer2[i];
-      if(val > 0 && val < EMPTY_VALUE)
+      // Highs
+      int cur_last_h = -1;
+      for(int i=0; i<MathMin(rates_total, 500); i++) { if(HighBuffer2[i]>0 && HighBuffer2[i]<EMPTY_VALUE) { cur_last_h=i; break; } }
+      if(cur_last_h != -1)
         {
-         MSLowBuffer[i] = val;
-         if(last_l > 0)
+         int cur_prev_h = -1;
+         for(int i=cur_last_h+1; i<rates_total; i++) { if(HighBuffer2[i]>0 && HighBuffer2[i]<EMPTY_VALUE) { cur_prev_h=i; break; } }
+         if(cur_last_h != last_h_idx || cur_prev_h != prev_h_idx)
            {
-            MSLowColorBuffer[i] = (val > last_l) ? 0 : 1;
-            ManageLabel("L", i, time[i], val, last_l, (MSLowColorBuffer[i]==0?clrGreen:clrRed));
+            if(last_h_idx != -1 && (HighBuffer2[last_h_idx] == 0 || HighBuffer2[last_h_idx] >= EMPTY_VALUE)) MSHighBuffer[last_h_idx] = EMPTY_VALUE;
+            if(prev_h_idx != -1 && (HighBuffer2[prev_h_idx] == 0 || HighBuffer2[prev_h_idx] >= EMPTY_VALUE)) MSHighBuffer[prev_h_idx] = EMPTY_VALUE;
+            last_h_idx = cur_last_h;
+            prev_h_idx = cur_prev_h;
+            MSHighBuffer[last_h_idx] = HighBuffer2[last_h_idx];
+            if(prev_h_idx != -1)
+              {
+               MSHighBuffer[prev_h_idx] = HighBuffer2[prev_h_idx];
+               MSHighColorBuffer[last_h_idx] = (HighBuffer2[last_h_idx] > HighBuffer2[prev_h_idx]) ? 0 : 1;
+              }
            }
-         else
+         else if(HighBuffer2[last_h_idx] != MSHighBuffer[last_h_idx])
            {
-            MSLowColorBuffer[i] = 0;
-            ManageLabel("L", i, time[i], val, val, clrGreen);
+            MSHighBuffer[last_h_idx] = HighBuffer2[last_h_idx];
+            if(prev_h_idx != -1) MSHighColorBuffer[last_h_idx] = (HighBuffer2[last_h_idx] > HighBuffer2[prev_h_idx]) ? 0 : 1;
            }
-         last_l = val;
         }
-      else
+      
+      // Lows
+      int cur_last_l = -1;
+      for(int i=0; i<MathMin(rates_total, 500); i++) { if(LowBuffer2[i]>0 && LowBuffer2[i]<EMPTY_VALUE) { cur_last_l=i; break; } }
+      if(cur_last_l != -1)
         {
-         MSLowBuffer[i] = EMPTY_VALUE;
-         MSLowColorBuffer[i] = EMPTY_VALUE;
-         ManageLabel("L", i, time[i], 0, 0, CLR_NONE);
+         int cur_prev_l = -1;
+         for(int i=cur_last_l+1; i<rates_total; i++) { if(LowBuffer2[i]>0 && LowBuffer2[i]<EMPTY_VALUE) { cur_prev_l=i; break; } }
+         if(cur_last_l != last_l_idx || cur_prev_l != prev_l_idx)
+           {
+            if(last_l_idx != -1 && (LowBuffer2[last_l_idx] == 0 || LowBuffer2[last_l_idx] >= EMPTY_VALUE)) MSLowBuffer[last_l_idx] = EMPTY_VALUE;
+            if(prev_l_idx != -1 && (LowBuffer2[prev_l_idx] == 0 || LowBuffer2[prev_l_idx] >= EMPTY_VALUE)) MSLowBuffer[prev_l_idx] = EMPTY_VALUE;
+            last_l_idx = cur_last_l;
+            prev_l_idx = cur_prev_l;
+            MSLowBuffer[last_l_idx] = LowBuffer2[last_l_idx];
+            if(prev_l_idx != -1)
+              {
+               MSLowBuffer[prev_l_idx] = LowBuffer2[prev_l_idx];
+               MSLowColorBuffer[last_l_idx] = (LowBuffer2[last_l_idx] > LowBuffer2[prev_l_idx]) ? 0 : 1;
+              }
+           }
+         else if(LowBuffer2[last_l_idx] != MSLowBuffer[last_l_idx])
+           {
+            MSLowBuffer[last_l_idx] = LowBuffer2[last_l_idx];
+            if(prev_l_idx != -1) MSLowColorBuffer[last_l_idx] = (LowBuffer2[last_l_idx] > LowBuffer2[prev_l_idx]) ? 0 : 1;
+           }
         }
      }
+
 //----     
    return(rates_total);
   }
