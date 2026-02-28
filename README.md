@@ -1,4 +1,4 @@
-Refactor the RAW_3_Level_ZZ_Semafor indicator into a Market Structure version where structure lines behave exactly like the Semafor/ZigZag — meaning the most recent leg is not confirmed and can update/repaint until a new pivot forms.
+Create an indicator using `RAW_3_Level_ZZ_Semafor.mq5` as a base to add a Market Structure feature where structure lines behave exactly like the Semafor/ZigZag — meaning the most recent leg is not confirmed and can update/repaint until a new pivot forms. The code in `RAW_3_Level_ZZ_Semafor.mq5` works and its logic should be used as a reference template.
 
 ### Core Foundation
 - Preserve all three ZigZag levels and existing arrow plots.
@@ -34,18 +34,7 @@ For each leg:
 - Red if current pivot price < previous pivot price.
 - Color updates dynamically for the active leg.
 
-#### 4. Descriptive Δ Labels
-
-For each structure leg:
-- Display midpoint label: Δ XXX pts
-- Label color must match the leg color.
-- Historical labels remain fixed.
-- The active (developing) leg’s label must update dynamically as price extends.
-- Use OBJ_TEXT for labels.
-- Do not delete all objects each tick.
-- Only update the active leg’s label; leave historical ones untouched.
-
-#### 5. Performance Model (Critical)
+#### 4. Performance Model (Critical)
 
 The indicator must:
 - Avoid full historical rescans on every tick.
@@ -57,7 +46,7 @@ The indicator must:
 - Update only the developing leg in real time.
 - Achieve near O(1) processing per tick.
 
-#### 6. Rendering Rules
+#### 5. Rendering Rules
 
 - Two DRAW_COLOR_SECTION plots:
     - High Structure
@@ -71,5 +60,4 @@ The indicator must:
 - Structure lines visually “grow” and adjust like ZigZag.
 - The last leg repaints naturally.
 - Historical legs remain fixed.
-- Δ labels update only for the active leg.
 - Indicator remains lightweight and stable even on large histories.
