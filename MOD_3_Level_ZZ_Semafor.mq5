@@ -1,3 +1,4 @@
+// this does not work!
 //+------------------------------------------------------------------+
 //|                                       MOD_3_Level_ZZ_Semafor.mq5 |
 //|                                      Copyright 2000, asystem2000 |
