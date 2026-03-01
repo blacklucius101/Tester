@@ -18,7 +18,7 @@
 - Older segments remain drawn but will not be updated later.
 
 ### 3. Incremental Updates (Per Tick)
-- Check only a recent lookback window (e.g., last 20 bars) for new pivots.
+- Check only a recent lookback window (e.g., StartBar2) for new pivots.
 - Compare the new pivot with the last pivot in state using time, not index.
 - Handle updates according to cases:
   1. Pivot exists and price changed → update the last segment.
