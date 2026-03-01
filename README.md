@@ -58,19 +58,19 @@
 
 ### 9. Developer Implementation Flow
 1. Initialization:
-- Scan all historical pivots.
-- Draw trendlines/labels for full history.
-- Store last two pivots in HighState and LowState.
+  - Scan all historical pivots.
+  - Draw trendlines/labels for full history.
+  - Store last two pivots in HighState and LowState.
 
 2. Per Tick:
-- Detect new pivots in lookback window.
-- Compare against HighState/LowState.
-- Update last segment if needed or add new segment.
-- Shift state so only last two pivots are mutable.
+  - Detect new pivots in lookback window.
+  - Compare against HighState/LowState.
+  - Update last segment if needed or add new segment.
+  - Shift state so only last two pivots are mutable.
 
 3. Object Handling:
-- Delete/redraw only the last segment and its label.
-- Leave older objects untouched.
+  - Delete/redraw only the last segment and its label.
+  - Leave older objects untouched.
 
 4. Frozen History:
-- Older pivots and trendlines remain unchanged and immutable.
+  - Older pivots and trendlines remain unchanged and immutable.
