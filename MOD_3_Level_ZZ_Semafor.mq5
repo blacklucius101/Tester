@@ -120,7 +120,7 @@ double HighBuffer1[],LowBuffer1[];
 double HighBuffer2[],LowBuffer2[];
 double HighBuffer3[],LowBuffer3[];
 //---- market structure swing storage
-SwingInfo HighSwings[],LowSwings[];
+static SwingInfo HighState[2], LowState[2];
 //---- declaration of the integer variables for the start of data calculation
 int StartBar1,StartBar2,StartBar3,StartBar;
 //---- declaration of variables for storing indicators handles
@@ -146,6 +146,11 @@ void OnInit()
    PlotIndexSetInteger(0,PLOT_ARROW,LowSymbol1);
 //---- indexing elements in the buffer as timeseries
    ArraySetAsSeries(LowBuffer1,true);
+   ArraySetAsSeries(HighBuffer1,true);
+   ArraySetAsSeries(LowBuffer2,true);
+   ArraySetAsSeries(HighBuffer2,true);
+   ArraySetAsSeries(LowBuffer3,true);
+   ArraySetAsSeries(HighBuffer3,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(1,HighBuffer1,INDICATOR_DATA);
@@ -155,8 +160,6 @@ void OnInit()
    PlotIndexSetString(1,PLOT_LABEL,"High1");
 //---- indicator symbol
    PlotIndexSetInteger(1,PLOT_ARROW,HighSymbol1);
-//---- indexing elements in the buffer as timeseries
-   ArraySetAsSeries(HighBuffer1,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(2,LowBuffer2,INDICATOR_DATA);
@@ -166,8 +169,6 @@ void OnInit()
    PlotIndexSetString(2,PLOT_LABEL,"Low2");
 //---- indicator symbol
    PlotIndexSetInteger(2,PLOT_ARROW,LowSymbol2);
-//---- indexing elements in the buffer as timeseries
-   ArraySetAsSeries(LowBuffer2,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(3,HighBuffer2,INDICATOR_DATA);
@@ -177,8 +178,6 @@ void OnInit()
    PlotIndexSetString(3,PLOT_LABEL,"High2");
 //---- indicator symbol
    PlotIndexSetInteger(3,PLOT_ARROW,HighSymbol2);
-//---- indexing elements in the buffer as timeseries
-   ArraySetAsSeries(HighBuffer2,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(4,LowBuffer3,INDICATOR_DATA);
@@ -188,8 +187,6 @@ void OnInit()
    PlotIndexSetString(4,PLOT_LABEL,"Low3");
 //---- indicator symbol
    PlotIndexSetInteger(4,PLOT_ARROW,LowSymbol3);
-//---- indexing elements in the buffer as timeseries
-   ArraySetAsSeries(LowBuffer3,true);
 
 //---- set dynamic array as an indicator buffer
    SetIndexBuffer(5,HighBuffer3,INDICATOR_DATA);
@@ -199,8 +196,6 @@ void OnInit()
    PlotIndexSetString(5,PLOT_LABEL,"High3");
 //---- indicator symbol
    PlotIndexSetInteger(5,PLOT_ARROW,HighSymbol3);
-//---- indexing elements in the buffer as timeseries
-   ArraySetAsSeries(HighBuffer3,true);
 
 //---- Set colors for different levels (lighter for level 1, darker for higher levels)
    PlotIndexSetInteger(0, PLOT_LINE_COLOR, clrDarkBlue);      // Level 1 Bullish - Light
@@ -251,6 +246,161 @@ void DeleteObjectsByPrefix(string prefix)
    ObjectsDeleteAll(0, prefix);
   }
 //+------------------------------------------------------------------+
+//| Helper to draw segments and labels                               |
+//+------------------------------------------------------------------+
+void DrawStructureSegment(string prefix, SwingInfo &s1, SwingInfo &s2, bool isLatest)
+  {
+   string name = prefix + (isLatest ? "LATEST" : (IntegerToString((long)s1.time) + "_" + IntegerToString((long)s2.time)));
+   ObjectCreate(0, name, OBJ_TREND, 0, s1.time, s1.price, s2.time, s2.price);
+
+   color lineColor = (s2.price > s1.price) ? clrLime : clrRed;
+
+   ObjectSetInteger(0, name, OBJPROP_COLOR, lineColor);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
+   ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+
+// Label
+   int points = (int)MathRound(MathAbs(s2.price - s1.price) / _Point);
+   string txtName = prefix + "TXT_" + (isLatest ? "LATEST" : (IntegerToString((long)s1.time) + "_" + IntegerToString((long)s2.time)));
+   datetime midTime = (datetime)(((long)s1.time + (long)s2.time) / 2);
+   double midPrice = (s1.price + s2.price) / 2.0;
+
+   ObjectCreate(0, txtName, OBJ_TEXT, 0, midTime, midPrice);
+   ObjectSetString(0, txtName, OBJPROP_TEXT, "Δ " + IntegerToString(points) + " pts");
+   ObjectSetInteger(0, txtName, OBJPROP_COLOR, lineColor);
+   ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 15);
+   ObjectSetInteger(0, txtName, OBJPROP_ANCHOR, (prefix == "MS_H_") ? ANCHOR_BOTTOM : ANCHOR_TOP);
+   ObjectSetInteger(0, txtName, OBJPROP_SELECTABLE, false);
+  }
+//+------------------------------------------------------------------+
+//| Helper to update market structure incrementally                  |
+//+------------------------------------------------------------------+
+void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buffer[], const datetime &times[], int lookback, int rates_total)
+  {
+// Find latest pivot in buffer (within lookback or at least 100 bars)
+   SwingInfo current;
+   current.price = 0;
+   current.time = 0;
+   int searchLimit = MathMax(lookback * 2, 100);
+   if(searchLimit > rates_total) searchLimit = rates_total;
+
+   for(int i = 0; i < searchLimit; i++)
+     {
+      if(buffer[i] > 0.0)
+        {
+         current.time = times[i];
+         current.price = buffer[i];
+         current.barIndex = i;
+         break;
+        }
+     }
+
+   if(current.time == 0) // No pivot found in recent history
+     {
+      if(state[1].time != 0)
+        {
+         // Check if our state pivot still exists further back
+         bool stillExists = false;
+         for(int i = 0; i < rates_total; i++)
+           {
+            if(times[i] == state[1].time)
+              {
+               if(buffer[i] > 0.0) stillExists = true;
+               break;
+              }
+            if(times[i] < state[1].time) break;
+           }
+         if(!stillExists)
+           {
+            ObjectDelete(0, prefix + "LATEST");
+            ObjectDelete(0, prefix + "TXT_LATEST");
+            state[1].time = 0;
+            state[1].price = 0;
+           }
+        }
+      return;
+     }
+
+   if(state[1].time == 0)
+     {
+      state[1] = current;
+      if(state[0].time != 0)
+         DrawStructureSegment(prefix, state[0], state[1], true);
+     }
+   else if(current.time == state[1].time)
+     {
+      // Case 1: Existing pivot update
+      if(MathAbs(current.price - state[1].price) > _Point / 10.0)
+        {
+         state[1].price = current.price;
+         ObjectDelete(0, prefix + "LATEST");
+         ObjectDelete(0, prefix + "TXT_LATEST");
+         if(state[0].time != 0)
+            DrawStructureSegment(prefix, state[0], state[1], true);
+        }
+     }
+   else if(current.time > state[1].time)
+     {
+      // New pivot or moved pivot
+      bool oldStillExists = false;
+      for(int i = 0; i < rates_total; i++)
+        {
+         if(times[i] == state[1].time)
+           {
+            if(buffer[i] > 0.0) oldStillExists = true;
+            break;
+           }
+         if(times[i] < state[1].time) break;
+        }
+
+      if(oldStillExists)
+        {
+         // Case 2: New pivot confirmed. Shift state.
+         ObjectDelete(0, prefix + "LATEST");
+         ObjectDelete(0, prefix + "TXT_LATEST");
+         if(state[0].time != 0)
+            DrawStructureSegment(prefix, state[0], state[1], false); // Freeze previous
+
+         state[0] = state[1];
+         state[1] = current;
+         DrawStructureSegment(prefix, state[0], state[1], true);
+        }
+      else
+        {
+         // Case 3: Pivot moved forward or replaced
+         state[1] = current;
+         ObjectDelete(0, prefix + "LATEST");
+         ObjectDelete(0, prefix + "TXT_LATEST");
+         if(state[0].time != 0)
+            DrawStructureSegment(prefix, state[0], state[1], true);
+        }
+     }
+   else if(current.time < state[1].time)
+     {
+      // Latest state pivot disappeared, current is now older
+      bool stillExists = false;
+      for(int i = 0; i < rates_total; i++)
+        {
+         if(times[i] == state[1].time)
+           {
+            if(buffer[i] > 0.0) stillExists = true;
+            break;
+           }
+         if(times[i] < state[1].time) break;
+        }
+      if(!stillExists)
+        {
+         state[1] = current;
+         ObjectDelete(0, prefix + "LATEST");
+         ObjectDelete(0, prefix + "TXT_LATEST");
+         if(state[0].time != 0)
+            DrawStructureSegment(prefix, state[0], state[1], true);
+        }
+     }
+  }
+//+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,    // number of bars in history at the current tick
@@ -295,105 +445,65 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
    if(CopyBuffer(Handle3,2,0,to_copy3,LowBuffer3)<=0) return(0);
 
 //--- Market Structure Engine ---
-   DeleteObjectsByPrefix("MS_H_");
-   DeleteObjectsByPrefix("MS_L_");
-
-//--- Extraction
-   if(ArraySize(HighSwings) != rates_total)
-     {
-      ArrayResize(HighSwings, rates_total);
-      ArrayResize(LowSwings, rates_total);
-     }
-
    datetime times[];
    if(CopyTime(_Symbol, _Period, 0, rates_total, times) <= 0) return(rates_total);
    ArraySetAsSeries(times, true);
 
-   int hCount = 0, lCount = 0;
-
-   // Process chronologically (from oldest to newest)
-   for(int i = rates_total - 1; i >= 0; i--)
+   if(prev_calculated <= 0)
      {
-      if(HighBuffer2[i] > 0.0)
+      DeleteObjectsByPrefix("MS_H_");
+      DeleteObjectsByPrefix("MS_L_");
+      ZeroMemory(HighState);
+      ZeroMemory(LowState);
+
+      int hCount = 0, lCount = 0;
+      SwingInfo tempHigh[], tempLow[];
+      ArrayResize(tempHigh, rates_total);
+      ArrayResize(tempLow, rates_total);
+
+      // 1. Scan historical pivots (chronologically oldest to newest)
+      for(int i = rates_total - 1; i >= 0; i--)
         {
-         HighSwings[hCount].time = times[i];
-         HighSwings[hCount].price = HighBuffer2[i];
-         HighSwings[hCount].barIndex = i; // Using series index for unique naming
-         hCount++;
+         if(HighBuffer2[i] > 0.0)
+           {
+            tempHigh[hCount].time = times[i];
+            tempHigh[hCount].price = HighBuffer2[i];
+            tempHigh[hCount].barIndex = i;
+            hCount++;
+           }
+         if(LowBuffer2[i] > 0.0)
+           {
+            tempLow[lCount].time = times[i];
+            tempLow[lCount].price = LowBuffer2[i];
+            tempLow[lCount].barIndex = i;
+            lCount++;
+           }
         }
-      if(LowBuffer2[i] > 0.0)
+
+      // 2. Draw all historical segments (except the very last one)
+      for(int i = 1; i < hCount - 1; i++)
+         DrawStructureSegment("MS_H_", tempHigh[i-1], tempHigh[i], false);
+      for(int i = 1; i < lCount - 1; i++)
+         DrawStructureSegment("MS_L_", tempLow[i-1], tempLow[i], false);
+
+      // 3. Store last two pivots and draw the latest mutable segment
+      if(hCount >= 2)
         {
-         LowSwings[lCount].time = times[i];
-         LowSwings[lCount].price = LowBuffer2[i];
-         LowSwings[lCount].barIndex = i;
-         lCount++;
+         HighState[0] = tempHigh[hCount-2];
+         HighState[1] = tempHigh[hCount-1];
+         DrawStructureSegment("MS_H_", HighState[0], HighState[1], true);
+        }
+      if(lCount >= 2)
+        {
+         LowState[0] = tempLow[lCount-2];
+         LowState[1] = tempLow[lCount-1];
+         DrawStructureSegment("MS_L_", LowState[0], LowState[1], true);
         }
      }
-
-//--- Draw High Structure
-   for(int i = 1; i < hCount; i++)
+   else
      {
-      string name = "MS_H_" + IntegerToString(HighSwings[i].barIndex);
-      ObjectCreate(0, name, OBJ_TREND, 0, HighSwings[i-1].time, HighSwings[i-1].price, HighSwings[i].time, HighSwings[i].price);
-      color lineColor;
-
-      // Determine slope direction
-      if(HighSwings[i].price > HighSwings[i-1].price)
-         lineColor = clrLime;     // Rising
-      else
-         lineColor = clrRed;      // Falling
-
-      ObjectSetInteger(0, name, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
-      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-
-      // Label
-      int points = (int)MathRound(MathAbs(HighSwings[i].price - HighSwings[i-1].price) / _Point);
-      string txtName = "MS_H_TXT_" + IntegerToString(HighSwings[i].barIndex);
-      datetime midTime = (datetime)(((long)HighSwings[i-1].time + (long)HighSwings[i].time) / 2);
-      double midPrice = (HighSwings[i-1].price + HighSwings[i].price) / 2.0;
-
-      ObjectCreate(0, txtName, OBJ_TEXT, 0, midTime, midPrice);
-      ObjectSetString(0, txtName, OBJPROP_TEXT, "Δ " + IntegerToString(points) + " pts");
-      ObjectSetInteger(0, txtName, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 8);
-      ObjectSetInteger(0, txtName, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
-      ObjectSetInteger(0, txtName, OBJPROP_SELECTABLE, false);
-     }
-
-//--- Draw Low Structure
-   for(int i = 1; i < lCount; i++)
-     {
-      string name = "MS_L_" + IntegerToString(LowSwings[i].barIndex);
-      ObjectCreate(0, name, OBJ_TREND, 0, LowSwings[i-1].time, LowSwings[i-1].price, LowSwings[i].time, LowSwings[i].price);
-      color lineColor;
-
-      // Determine slope direction
-      if(LowSwings[i].price > LowSwings[i-1].price)
-         lineColor = clrLime;     // Rising
-      else
-         lineColor = clrRed;      // Falling
-
-      ObjectSetInteger(0, name, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
-      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-
-      // Label
-      int points = (int)MathRound(MathAbs(LowSwings[i].price - LowSwings[i-1].price) / _Point);
-      string txtName = "MS_L_TXT_" + IntegerToString(LowSwings[i].barIndex);
-      datetime midTime = (datetime)(((long)LowSwings[i-1].time + (long)LowSwings[i].time) / 2);
-      double midPrice = (LowSwings[i-1].price + LowSwings[i].price) / 2.0;
-
-      ObjectCreate(0, txtName, OBJ_TEXT, 0, midTime, midPrice);
-      ObjectSetString(0, txtName, OBJPROP_TEXT, "Δ " + IntegerToString(points) + " pts");
-      ObjectSetInteger(0, txtName, OBJPROP_COLOR, lineColor);
-      ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 8);
-      ObjectSetInteger(0, txtName, OBJPROP_ANCHOR, ANCHOR_TOP);
-      ObjectSetInteger(0, txtName, OBJPROP_SELECTABLE, false);
+      UpdateMarketStructure("MS_H_", HighState, HighBuffer2, times, StartBar2, rates_total);
+      UpdateMarketStructure("MS_L_", LowState, LowBuffer2, times, StartBar2, rates_total);
      }
 
    return(rates_total);
