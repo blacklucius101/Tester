@@ -1,89 +1,174 @@
-Create an MT5 custom indicator in MQL5 that acts as a secondary analytical layer for the existing indicator: `MOD_3_Level_ZZ_Semafor`.
+Modify the existing MT5 indicator: `MOD_3_Level_ZZ_Semafor.mq5`.
 
-The primary indicator already:
-- generates ZigZag semafor pivots
-- exposes pivot buffers
+The indicator already:
+- generates multi-level ZigZag semafor pivots
+- tracks mutable pivot state
 - handles repainting internally
+- maintains market structure state using Level 2 semafors
 
-The secondary indicator must NOT replicate ZigZag calculations.
-It must call the primary indicator once during OnInit() using iCustom() and read its buffers using CopyBuffer().
+The new functionality must be integrated DIRECTLY into the existing primary indicator.
 
-# Objective
-The secondary indicator detects directional expansion events based on Level 2 semafors only.
-When the distance between consecutive: Higher Highs (HH) OR Lower Lows (LL) reaches or exceeds 24000 points the indicator plots a vertical line at the candle where the threshold is FIRST observed.
+# OBJECTIVE
+Add a Level 2 directional expansion engine that detects cumulative directional expansion across consecutive structural continuation swings.
 
-# IMPORTANT LOGIC RULES
-1. Use ONLY Level 2 semafors from the primary indicator. Ignore all other semafor levels.
-2. Daily reset behavior. The logic operates independently for each trading day.
-At the start of a new day:
-- clear all internal tracking variables
-- clear directional lock state
-- ignore previous day semafors
+When cumulative directional expansion reaches or exceeds 24000 points:
+- draw a permanent vertical line
+- lock that direction
+- ignore additional same-direction signals
+- until the opposite directional threshold event occurs
 
-DO NOT delete historical vertical lines already drawn.
+The logic must use ONLY:
+- Level 2 High semafors
+- Level 2 Low semafors
 
-3. Consecutive HH logic
-Example:
-A = previous High2 semafor
-B = latest High2 semafor
+Ignore Levels 1 and 3 entirely.
+
+# CORE CONCEPT
+This is NOT pairwise pivot comparison.
+
+The system must:
+- accumulate directional expansion across multiple consecutive Higher Highs (HH)
+- accumulate directional expansion across multiple consecutive Lower Lows (LL)
+
+The expansion origin remains active until structurally invalidated.
+
+# IMPORTANT STRUCTURAL RULES
+
+## 1. Bullish Expansion Logic
+Assume consecutive Level 2 High semafors: A → B → C → D
 
 If:
 B > A
+C > B
+D > C
 
-then compute:
-(B - A) / _Point
+Then bullish expansion remains active.
 
-If the result is:
->= 24000
+The bullish expansion distance is ALWAYS:
 
-then:
-draw ONE bullish vertical line
-color = clrLime
-style = STYLE_DOT
-width = 1
+(CurrentHighestHH - ExpansionOriginHH) / _Point
 
-The vertical line must be drawn at the candle where the threshold is FIRST observed.
-
-4. Consecutive LL logic
 Example:
-A = previous Low2 semafor
-B = latest Low2 semafor
+A = 1.10000
+B = 1.14000
+C = 1.18000
+D = 1.34000
+
+Expansion distance: D - A = 24000 points
+
+At the FIRST candle where: distance >= 24000
+
+Draw:
+- one bullish vertical line
+- color = clrLime
+- style = STYLE_DOT
+- width = 1
+
+Then:
+- lock bullish direction
+- ignore all future bullish threshold events
+- even if higher HHs continue forming
+
+Bullish triggers remain disabled until: a bearish threshold event occurs.
+
+# 2. Bearish Expansion Logic
+Assume consecutive Level 2 Low semafors: A → B → C → D
 
 If:
 B < A
+C < B
+D < C
 
-then compute:
-(A - B) / _Point
+Then bearish expansion remains active.
 
-If the result is:
->= 24000
+The bearish expansion distance is ALWAYS: (ExpansionOriginLL - CurrentLowestLL) / _Point
 
-then:
-draw ONE bearish vertical line
-color = clrRed
-style = STYLE_DOT
-width = 1
+Example:
+A = 1.34000
+B = 1.30000
+C = 1.26000
+D = 1.10000
 
-The vertical line must be drawn at the candle where the threshold is FIRST observed.
+Expansion distance: A - D = 24000 points
 
-5. Alternation lock logic (VERY IMPORTANT)
-After a bullish threshold event fires:
-- ignore ALL future bullish events
-- even if larger HHs form
-- even if the semafor repaints higher
+At the FIRST candle where: distance >= 24000
 
-Bullish events remain disabled until: a bearish threshold event occurs.
+Draw:
+- one bearish vertical line
+- color = clrRed
+- style = STYLE_DOT
+- width = 1
 
-After a bearish threshold event fires: 
-- ignore ALL future bearish events
-- even if larger LLs form
-- even if the semafor repaints lower
+Then:
+- lock bearish direction
+- ignore all future bearish threshold events
+- even if lower LLs continue forming
 
-Bearish events remain disabled until: a bullish threshold event occur.
+Bearish triggers remain disabled until: a bullish threshold event occurs.
 
-Implement this using a directional state machine.
+# 3. STRUCTURAL INVALIDATION RULES (CRITICAL)
+A Lower High (LH) is NOT confirmed immediately.
 
-Suggested enum:
+A tentative LH becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 Low semafor forms afterward (HL or LL).
+
+Until that low-side semafor forms:
+- the tentative LH may still repaint into a HH
+- bullish expansion remains active
+- bullish origin must NOT reset
+
+Likewise:
+
+A Higher Low (HL) is NOT confirmed immediately.
+
+A tentative HL becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 High semafor forms afterward (LH or HH).
+
+Until that high-side semafor forms:
+- the tentative HL may still repaint into a LL
+- bearish expansion remains active
+- bearish origin must NOT reset
+
+# 4. EXPANSION RESET RULES
+Bullish expansion resets ONLY when: a LH becomes structurally confirmed.
+
+Bearish expansion resets ONLY when: a HL becomes structurally confirmed.
+
+At reset:
+- establish a new expansion origin
+- restart accumulation from the new structure
+
+# 5. REPAINTING BEHAVIOR
+The indicator MUST use: the latest mutable Level 2 semafor pivots.
+
+DO NOT wait for final ZigZag stabilization.
+
+However: structural invalidation/reset logic must obey confirmation rules described above.
+
+Once a vertical line is drawn:
+- NEVER move it
+- NEVER delete it
+- NEVER redraw it
+- even if pivots repaint farther afterward
+
+Vertical lines are permanent.
+
+# 6. DAILY RESET LOGIC
+At the start of each new trading day:
+
+Reset:
+- bullish expansion origin
+- bearish expansion origin
+- directional lock state
+- structural tracking variables
+
+Ignore all previous-day semafors for new calculations.
+
+HOWEVER:
+DO NOT delete historical vertical lines already drawn.
+
+The first same-day Level 2 pivot becomes the new expansion baseline.
+
+# 7. DIRECTIONAL LOCK STATE MACHINE
+Implement:
 ```
 enum DirectionState
 {
@@ -93,79 +178,100 @@ enum DirectionState
 };
 ```
 
-6. Repainting behavior
-The latest semafor pivot MUST be used.
-Do NOT wait for pivot confirmation.
+Behavior:
 
-Reason: the objective is to capture the FIRST threshold breach, not the final stabilized ZigZag pivot.
+WAITING
+- bullish threshold → BULL_LOCKED
+- bearish threshold → BEAR_LOCKED
 
-If a semafor later repaints farther:
-- DO NOT move the vertical line
-- DO NOT redraw it
-- DO NOT delete it
+BULL_LOCKED
+- ignore all bullish threshold events
+- bearish threshold → BEAR_LOCKED
 
-Vertical lines are permanent once created.
+BEAR_LOCKED
+- ignore all bearish threshold events
+- bullish threshold → BULL_LOCKED
 
-7. Performance requirements
-The indicator must evaluate conditions ONLY once per completed candle.
-Do NOT process logic on every tick.
+# 8. PERFORMANCE REQUIREMENTS
+DO NOT scan full chart history repeatedly.
 
-Suggested approach:
-`if(time[1] != lastProcessedBarTime)`
+The indicator already maintains incremental structure state.
 
-The latest mutable semafor may still be read from: buffer[0] but calculations must only occur after candle close.
+Extend the existing incremental architecture.
 
-8. Incremental processing only
-Do NOT repeatedly scan the entire chart history.
-Maintain incremental state variables such as:
-- previous HH
-- previous LL
-- current directional lock
-- last processed bar time
-- current trading day
+The expansion engine must:
+- process incrementally
+- evaluate only when pivots update
+- avoid expensive rescans
 
-The indicator should be lightweight and efficient.
+# 9. HISTORICAL COMPATIBILITY
+When the indicator first loads:
+- reconstruct historical expansion events chronologically
+- draw historical vertical lines
+- obey all:
+  - repaint logic
+  - confirmation rules
+  - daily reset rules
+  - directional lock rules
 
-9. Vertical line naming
-Use deterministic object names to prevent duplicates.
+After initialization:
+- continue incrementally only
+
+# 10. VERTICAL LINE DRAWING
+Bullish line:
+- color = clrLime
+- style = STYLE_DOT
+- width = 1
+
+Bearish line:
+- color = clrRed
+- style = STYLE_DOT
+- width = 1
+
+The vertical line must be drawn at:
+- the candle where the threshold was FIRST observed
+
+# 11. OBJECT NAMING
+
+Use deterministic names.
 
 Examples:
-```
+
 "HH_24000_" + IntegerToString((long)time)
 "LL_24000_" + IntegerToString((long)time)
-```
 
-10. Expected behavior example
-Example bullish sequence:
-```
-HH1 = 1.1000
-HH2 = 1.3400
-```
+Where:
+time = open time of the candle where the threshold breach was first detected.
 
-Difference: 24000 points
+Prevent duplicate object creation.
 
-Immediately:
-- draw Lime dotted vertical line
-- lock bullish direction
+# 12. POINT CALCULATION
+Use:
 
-If semafor later repaints to: 1.5800
+distance = MathAbs(priceB - priceA) / _Point;
 
-DO NOT:
-- move the line
-- redraw another bullish line
+DO NOT convert to pips.
 
-Continue ignoring bullish signals until: a bearish 24000 LL event occurs.
+Threshold:
+24000 points
 
-# Deliverables
-Produce:
-- complete compilable MQL5 indicator code
-- proper OnInit()
-- proper OnCalculate()
-- proper object management
-- proper state machine implementation
-- proper daily reset logic
-- compatibility with historical data
-- proper incremental processing
-- comments explaining all major logic blocks
+# 13. IMPLEMENTATION REQUIREMENTS
+Maintain compatibility with:
+- existing semafor plotting
+- existing market structure drawing
+- existing repaint handling
+- existing object management
 
-The indicator must compile cleanly in MetaEditor with no warnings or errors.
+Do NOT break current functionality.
+
+Add:
+- clean helper functions
+- comments explaining logic
+- robust state handling
+- safe object creation checks
+
+The modified indicator must:
+- compile cleanly
+- produce no warnings/errors
+- remain lightweight
+- function correctly in both live and historical environments.
