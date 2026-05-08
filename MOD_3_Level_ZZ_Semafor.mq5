@@ -113,6 +113,57 @@ struct SwingInfo
    double            price;
   };
 
+//+------------------------------------------------------------------+
+//|  Expansion Engine Structures                                     |
+//+------------------------------------------------------------------+
+enum DirectionState
+  {
+   WAITING,
+   BULL_LOCKED,
+   BEAR_LOCKED
+  };
+
+struct ExpansionEngineState
+  {
+   DirectionState    dirState;
+
+   // Bullish tracking
+   double            bullOriginPrice;
+   double            bullHighestPrice;
+   bool              bullHasOrigin;
+   double            bullTentativeLHPrice;
+   bool              bullHasTentativeLH;
+
+   // Bearish tracking
+   double            bearOriginPrice;
+   double            bearLowestPrice;
+   bool              bearHasOrigin;
+   double            bearTentativeHLPrice;
+   bool              bearHasTentativeHL;
+
+   datetime          lastDay;
+   
+   void Reset(datetime time)
+   {
+      dirState = WAITING;
+      bullHasOrigin = false;
+      bullOriginPrice = 0;
+      bullHighestPrice = 0;
+      bullHasTentativeLH = false;
+      bullTentativeLHPrice = 0;
+      bearHasOrigin = false;
+      bearOriginPrice = 0;
+      bearLowestPrice = 0;
+      bearHasTentativeHL = false;
+      bearTentativeHLPrice = 0;
+      
+      MqlDateTime dt;
+      TimeToStruct(time, dt);
+      dt.hour = 0; dt.min = 0; dt.sec = 0;
+      lastDay = StructToTime(dt);
+   }
+  };
+
 //+----------------------------------------------+
 //---- declaration of dynamic arrays that
 // will be used as indicator buffers
@@ -121,6 +172,14 @@ double HighBuffer2[],LowBuffer2[];
 double HighBuffer3[],LowBuffer3[];
 //---- market structure swing storage
 static SwingInfo HighState[2], LowState[2];
+//---- expansion engine state
+static ExpansionEngineState EEState;
+struct PivotPoint
+  {
+   bool              isHigh;
+   double            price;
+   datetime          time;
+  };
 //---- declaration of the integer variables for the start of data calculation
 int StartBar1,StartBar2,StartBar3,StartBar;
 //---- declaration of variables for storing indicators handles
@@ -237,6 +296,8 @@ void OnDeinit(const int reason)
   {
    DeleteObjectsByPrefix("MS_H_");
    DeleteObjectsByPrefix("MS_L_");
+   DeleteObjectsByPrefix("HH_24000_");
+   DeleteObjectsByPrefix("LL_24000_");
   }
 //+------------------------------------------------------------------+
 //| Deletes objects by prefix                                        |
@@ -277,7 +338,123 @@ void DrawStructureSegment(string prefix, SwingInfo &s1, SwingInfo &s2, bool isLa
 //+------------------------------------------------------------------+
 //| Helper to update market structure incrementally                  |
 //+------------------------------------------------------------------+
-void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buffer[], const datetime &times[], int lookback, int rates_total)
+void DrawExpansionLine(string type, datetime time)
+  {
+   string name = type + "_24000_" + IntegerToString((long)time);
+   if(ObjectFind(0, name) >= 0) return;
+
+   ObjectCreate(0, name, OBJ_VLINE, 0, time, 0);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, (type == "HH") ? clrLime : clrRed);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DOT);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+  }
+
+void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, datetime time)
+  {
+   MqlDateTime dt;
+   TimeToStruct(time, dt);
+   dt.hour = 0; dt.min = 0; dt.sec = 0;
+   datetime currentDay = StructToTime(dt);
+   
+   if(currentDay > state.lastDay)
+     {
+      state.Reset(time);
+     }
+
+   if(isHigh)
+     {
+      // 1. Structural confirmation for Bearish reset
+      // A tentative HL becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 High semafor forms afterward.
+      if(state.bearHasTentativeHL)
+        {
+         // At reset: establish a new expansion origin; restart accumulation from the new structure
+         state.bearHasOrigin = true;
+         state.bearOriginPrice = state.bearTentativeHLPrice;
+         state.bearLowestPrice = state.bearTentativeHLPrice;
+         state.bearHasTentativeHL = false;
+        }
+
+      // 2. Bullish logic
+      if(!state.bullHasOrigin)
+        {
+         state.bullHasOrigin = true;
+         state.bullOriginPrice = price;
+         state.bullHighestPrice = price;
+         state.bullHasTentativeLH = false;
+        }
+      else
+        {
+         if(price >= state.bullHighestPrice)
+           {
+            state.bullHighestPrice = price;
+            state.bullHasTentativeLH = false;
+
+            if(state.dirState != BULL_LOCKED)
+              {
+               double distance = MathAbs(state.bullHighestPrice - state.bullOriginPrice) / _Point;
+               if(distance >= 24000)
+                 {
+                  DrawExpansionLine("HH", time);
+                  state.dirState = BULL_LOCKED;
+                 }
+              }
+           }
+         else
+           {
+            state.bullHasTentativeLH = true;
+            state.bullTentativeLHPrice = price;
+           }
+        }
+     }
+   else // isLow
+     {
+      // 1. Structural confirmation for Bullish reset
+      // A tentative LH becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 Low semafor forms afterward.
+      if(state.bullHasTentativeLH)
+        {
+         // At reset: establish a new expansion origin; restart accumulation from the new structure
+         state.bullHasOrigin = true;
+         state.bullOriginPrice = state.bullTentativeLHPrice;
+         state.bullHighestPrice = state.bullTentativeLHPrice;
+         state.bullHasTentativeLH = false;
+        }
+
+      // 2. Bearish logic
+      if(!state.bearHasOrigin)
+        {
+         state.bearHasOrigin = true;
+         state.bearOriginPrice = price;
+         state.bearLowestPrice = price;
+         state.bearHasTentativeHL = false;
+        }
+      else
+        {
+         if(price <= state.bearLowestPrice)
+           {
+            state.bearLowestPrice = price;
+            state.bearHasTentativeHL = false;
+
+            if(state.dirState != BEAR_LOCKED)
+              {
+               double distance = MathAbs(state.bearOriginPrice - state.bearLowestPrice) / _Point;
+               if(distance >= 24000)
+                 {
+                  DrawExpansionLine("LL", time);
+                  state.dirState = BEAR_LOCKED;
+                 }
+              }
+           }
+         else
+           {
+            state.bearHasTentativeHL = true;
+            state.bearTentativeHLPrice = price;
+           }
+        }
+     }
+  }
+
+void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buffer[], const datetime &times[], int lookback, int rates_total, bool isHigh)
   {
 // Find latest pivot in buffer (within lookback or at least 100 bars)
    SwingInfo current;
@@ -362,6 +539,8 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
          ObjectDelete(0, prefix + "TXT_LATEST");
          if(state[0].time != 0)
             DrawStructureSegment(prefix, state[0], state[1], false); // Freeze previous
+
+         ProcessPivot(EEState, isHigh, state[1].price, state[1].time);
 
          state[0] = state[1];
          state[1] = current;
@@ -453,23 +632,35 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
      {
       DeleteObjectsByPrefix("MS_H_");
       DeleteObjectsByPrefix("MS_L_");
+      DeleteObjectsByPrefix("HH_24000_");
+      DeleteObjectsByPrefix("LL_24000_");
       ZeroMemory(HighState);
       ZeroMemory(LowState);
+      EEState.Reset(times[rates_total-1]);
 
-      int hCount = 0, lCount = 0;
+      int hCount = 0, lCount = 0, pCount = 0;
       SwingInfo tempHigh[], tempLow[];
+      PivotPoint pivots[];
       ArrayResize(tempHigh, rates_total);
       ArrayResize(tempLow, rates_total);
+      ArrayResize(pivots, rates_total * 2);
 
       // 1. Scan historical pivots (chronologically oldest to newest)
       for(int i = rates_total - 1; i >= 0; i--)
         {
+         bool found = false;
          if(HighBuffer2[i] > 0.0)
            {
             tempHigh[hCount].time = times[i];
             tempHigh[hCount].price = HighBuffer2[i];
             tempHigh[hCount].barIndex = i;
             hCount++;
+
+            pivots[pCount].isHigh = true;
+            pivots[pCount].price = HighBuffer2[i];
+            pivots[pCount].time = times[i];
+            pCount++;
+            found = true;
            }
          if(LowBuffer2[i] > 0.0)
            {
@@ -477,6 +668,12 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
             tempLow[lCount].price = LowBuffer2[i];
             tempLow[lCount].barIndex = i;
             lCount++;
+
+            pivots[pCount].isHigh = false;
+            pivots[pCount].price = LowBuffer2[i];
+            pivots[pCount].time = times[i];
+            pCount++;
+            found = true;
            }
         }
 
@@ -499,11 +696,26 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
          LowState[1] = tempLow[lCount-1];
          DrawStructureSegment("MS_L_", LowState[0], LowState[1], true);
         }
+
+      // 4. Process all pivots through the expansion engine
+      // IMPORTANT: Using times[rates_total-1] as oldest and times[0] as newest.
+      // The pivots array was populated by iterating i from rates_total-1 down to 0,
+      // so pivots[0] is the oldest pivot and pivots[pCount-1] is the newest.
+      for(int i = 0; i < pCount; i++)
+        {
+         ProcessPivot(EEState, pivots[i].isHigh, pivots[i].price, pivots[i].time);
+        }
      }
    else
      {
-      UpdateMarketStructure("MS_H_", HighState, HighBuffer2, times, StartBar2, rates_total);
-      UpdateMarketStructure("MS_L_", LowState, LowBuffer2, times, StartBar2, rates_total);
+      UpdateMarketStructure("MS_H_", HighState, HighBuffer2, times, StartBar2, rates_total, true);
+      UpdateMarketStructure("MS_L_", LowState, LowBuffer2, times, StartBar2, rates_total, false);
+      
+      // Also process the current mutable pivot for threshold breach
+      if(HighState[1].time != 0)
+         ProcessPivot(EEState, true, HighState[1].price, HighState[1].time);
+      if(LowState[1].time != 0)
+         ProcessPivot(EEState, false, LowState[1].price, LowState[1].time);
      }
 
    return(rates_total);
