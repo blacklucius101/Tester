@@ -375,13 +375,11 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
 
    if(isHigh)
      {
-      // 1. Structural confirmation for Bearish reset
-      // A tentative HL becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 High semafor forms afterward.
+      // 1. Confirm opposite side (Bearish)
       if(state.dirState != BEAR_LOCKED)
         {
          if(state.bearHasTentativeHL)
            {
-            // At reset: establish a new expansion origin; restart accumulation from the new structure
             state.bearHasOrigin = true;
             state.bearOriginPrice = state.bearTentativeHLPrice;
             state.bearLowestPrice = state.bearTentativeHLPrice;
@@ -389,9 +387,25 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
            }
         }
 
-      // 2. Bullish logic
-      if(state.dirState != BULL_LOCKED)
+      // 2. Handle Bullish side
+      if(state.dirState == BULL_LOCKED)
         {
+         state.bullOriginPrice = price;
+         state.bullHighestPrice = price;
+         state.bullHasOrigin = true;
+         state.bullHasTentativeLH = false;
+        }
+      else
+        {
+         // Contraction logic: ANY subsequent pivot confirms tentative LH
+         if(state.bullHasTentativeLH)
+           {
+            state.bullHasOrigin = true;
+            state.bullOriginPrice = state.bullTentativeLHPrice;
+            state.bullHighestPrice = state.bullTentativeLHPrice;
+            state.bullHasTentativeLH = false;
+           }
+
          if(!state.bullHasOrigin)
            {
             state.bullHasOrigin = true;
@@ -411,6 +425,7 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
                  {
                   DrawExpansionLine("HH", time);
                   state.dirState = BULL_LOCKED;
+                  state.bullOriginPrice = price; // Origin shifts to the threshold-triggering pivot
                  }
               }
             else
@@ -423,13 +438,11 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
      }
    else // isLow
      {
-      // 1. Structural confirmation for Bullish reset
-      // A tentative LH becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 Low semafor forms afterward.
+      // 1. Confirm opposite side (Bullish)
       if(state.dirState != BULL_LOCKED)
         {
          if(state.bullHasTentativeLH)
            {
-            // At reset: establish a new expansion origin; restart accumulation from the new structure
             state.bullHasOrigin = true;
             state.bullOriginPrice = state.bullTentativeLHPrice;
             state.bullHighestPrice = state.bullTentativeLHPrice;
@@ -437,9 +450,25 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
            }
         }
 
-      // 2. Bearish logic
-      if(state.dirState != BEAR_LOCKED)
+      // 2. Handle Bearish side
+      if(state.dirState == BEAR_LOCKED)
         {
+         state.bearOriginPrice = price;
+         state.bearLowestPrice = price;
+         state.bearHasOrigin = true;
+         state.bearHasTentativeHL = false;
+        }
+      else
+        {
+         // Contraction logic: ANY subsequent pivot confirms tentative HL
+         if(state.bearHasTentativeHL)
+           {
+            state.bearHasOrigin = true;
+            state.bearOriginPrice = state.bearTentativeHLPrice;
+            state.bearLowestPrice = state.bearTentativeHLPrice;
+            state.bearHasTentativeHL = false;
+           }
+
          if(!state.bearHasOrigin)
            {
             state.bearHasOrigin = true;
@@ -459,6 +488,7 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
                  {
                   DrawExpansionLine("LL", time);
                   state.dirState = BEAR_LOCKED;
+                  state.bearOriginPrice = price; // Origin shifts to the threshold-triggering pivot
                  }
               }
             else
