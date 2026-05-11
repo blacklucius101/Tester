@@ -1,254 +1,155 @@
-Modify the existing MT5 indicator `MOD_3_Level_ZZ_Semafor.mq5`.
+You are modifying an MT5 indicator expansion engine inside `ProcessPivot()`.
 
-The current implementation already contains:
-* Level 2 expansion engine
-* directional lock state machine
-* threshold detection
-* repaint-aware mutable pivot processing
-* daily reset logic
-* historical bootstrap reconstruction
+The current implementation incorrectly treats `BULL_LOCKED` and `BEAR_LOCKED` as fully inactive states. This causes stale expansion origins to persist and later trigger false threshold events.
 
-DO NOT rewrite the indicator architecture.
+You must preserve the existing architecture and only modify the state behavior logic inside `ProcessPivot()`.
 
-Apply ONLY the following targeted corrections.
+# Intended State Semantics
 
-# OBJECTIVE
-Stabilize live-state behavior by:
-1. preventing repeated processing of identical mutable pivots
-2. converting directional lock into a true active-regime freeze mechanism
+## WAITING
 
-The goal is:
-* stable live forward behavior
-* reduced state churn
-* cleaner regime transitions
-* improved computational efficiency
+* Initial state at the start of a new day.
+* No pivots processed yet.
 
-Historical replay precision is NOT a concern.
-
-DO NOT redesign the engine into a fully event-sourced system.
-
-Maintain the existing lightweight architecture.
-
-# REQUIRED CORRECTION 1 — PIVOT DEDUPLICATION
-
-## PROBLEM
-The current implementation repeatedly calls:
-```
-ProcessPivot(...)
-```
-on every tick for the same mutable Level 2 pivot.
-
-This causes:
-* redundant state mutation
-* repeated tentative-state processing
-* repeated reset evaluation
-* unnecessary CPU churn
-* unstable live-state behavior during repainting
-
-# REQUIRED FIX
-Add lightweight pivot deduplication.
-The expansion engine must process a pivot ONLY IF:
-* pivot timestamp changed
-  OR
-* pivot price changed materially
-
-DO NOT process identical mutable pivots repeatedly.
-
-# IMPLEMENTATION REQUIREMENTS
-Add the following fields to:
-```
-struct ExpansionEngineState
-```
-
-Add:
-```
-datetime lastProcessedHighTime;
-double   lastProcessedHighPrice;
-
-datetime lastProcessedLowTime;
-double   lastProcessedLowPrice;
-```
-
-Initialize/reset them properly inside:
-```
-Reset(...)
-```
-
-Use:
-* time comparison
-* AND price comparison
-
-# LIVE PROCESSING RULES
-In live incremental mode:
-Replace unconditional calls: `ProcessPivot(...)`
-with guarded processing.
-
-Example logic:
-```
-bool highChanged =
-   HighState[1].time != state.lastProcessedHighTime ||
-   MathAbs(HighState[1].price - state.lastProcessedHighPrice) > _Point;
-```
-
-ONLY process when:
-```
-highChanged == true
-```
-
-After processing:
-* update stored lastProcessed fields
-
-Apply same logic to:
-* highs
-* lows
-
-# IMPORTANT
-DO NOT suppress repaint responsiveness.
-
-If:
-* pivot time changes
-  OR
-* mutable pivot price extends
-
-the engine MUST still process it.
-
-The goal is:
-* event-like behavior
-  without redesigning the architecture.
-
-# REQUIRED CORRECTION 2 — TRUE DIRECTIONAL LOCK FREEZE
-
-# PROBLEM
-Current implementation only suppresses:
-* additional threshold creation
-
-But the locked direction still continues:
-* origin updates
-* tentative structure tracking
-* reset handling
-* expansion accumulation
-
-This creates:
-* hidden state drift
-* unnecessary processing
-* unstable directional semantics
-
-# REQUIRED FIX
-Directional lock must become:
-* an ACTIVE regime freeze
+## BULL_LOCKED
 
 Meaning:
 
-When:
-```
-dirState == BULL_LOCKED
-```
+* Bullish expansion accumulation is frozen.
+* Bearish expansion processing remains active.
 
-Then:
-* ALL bullish expansion processing must stop entirely
+Behavior:
 
-INCLUDING:
-* bullish origin updates
-* bullish HH tracking
-* bullish tentative LH tracking
-* bullish reset handling
-* bullish accumulation logic
-
-ONLY bearish-side logic remains active.
-
-Likewise:
-
-When:
-```
-dirState == BEAR_LOCKED
-```
-
-Then:
-* ALL bearish expansion processing must stop entirely
-
-ONLY bullish-side logic remains active.
-
-# IMPORTANT EXCEPTION
-Opposite-direction confirmation logic MUST still function.
+* Every new HIGH pivot automatically becomes the new bullish origin.
+* No distinction between HH and LH while frozen.
+* No bullish threshold calculations while frozen.
+* Bullish contraction logic is disabled while frozen.
+* Bearish logic continues normally.
 
 Example:
+If HH1 triggers threshold:
 
-When:
-```
-dirState == BULL_LOCKED
-```
-
-the engine must STILL allow:
-* bearish-side confirmation logic
-* bearish expansion tracking
-* bearish threshold detection
-
-because bearish threshold achievement is what transitions the regime out of:
-```
-BULL_LOCKED
-```
-
-# REQUIRED PROCESSING FLOW
-
-## HIGH pivot branch
-Allow:
-* bearish confirmation/reset logic
+* plot lime vertical line at HH1
+* state becomes BULL_LOCKED
+* OriginHH shifts to HH1
 
 Then:
 
-If:
-```
-dirState == BULL_LOCKED
-```
+* HH2 automatically becomes new OriginHH
+* LH1 automatically becomes new OriginHH
+* no bullish expansion accumulation occurs
 
-Immediately exit bullish-side processing.
-Do NOT continue bullish expansion logic.
+Bearish side continues operating normally.
 
-# LOW pivot branch
+---
 
-Allow:
-* bullish confirmation/reset logic
+## BEAR_LOCKED
+
+Meaning:
+
+* Bearish expansion accumulation is frozen.
+* Bullish expansion processing remains active.
+
+Behavior:
+
+* Every new LOW pivot automatically becomes the new bearish origin.
+* No distinction between LL and HL while frozen.
+* No bearish threshold calculations while frozen.
+* Bearish contraction logic is disabled while frozen.
+* Bullish logic continues normally.
+
+Example:
+If LL2 triggers threshold:
+
+* plot red vertical line at LL2
+* state becomes BEAR_LOCKED
+* OriginLL shifts to LL2
 
 Then:
 
-If:
+* HL1 automatically becomes new OriginLL
+* HL2 automatically becomes new OriginLL
+* no bearish expansion accumulation occurs
+
+Bullish side continues operating normally.
+
+# Required Fix
+
+Currently the code does this:
+
+```cpp
+if(state.dirState != BEAR_LOCKED)
+{
+   // bearish logic
+}
 ```
-dirState == BEAR_LOCKED
-```
 
-Immediately exit bearish-side processing.
-Do NOT continue bearish expansion logic.
+and similarly for bullish logic.
 
-# TARGET BEHAVIOR
-WAITING
-* both engines active
+This is WRONG because frozen sides stop updating origins entirely.
 
-BULL_LOCKED
-* bearish engine only active
+You must replace this behavior with:
 
-BEAR_LOCKED
-* bullish engine only active
+# Correct Behavior For Frozen Side
 
-# IMPORTANT CONSTRAINTS
-Maintain compatibility with:
-* existing semafor plotting
-* existing market structure drawing
-* existing repaint handling
-* existing object naming
-* existing threshold logic
-* existing daily reset behavior
+When `state.dirState == BEAR_LOCKED`:
 
-DO NOT:
-* redesign the architecture
-* introduce full event sourcing
-* rewrite the structure engine
-* introduce heavy historical replay simulation
+* EVERY low pivot must immediately become:
 
-The indicator must:
-* compile cleanly
-* produce no warnings/errors
-* remain lightweight
-* preserve current behavior except for the corrections above
-* remain repaint-aware
-* remain incrementally processed
-* remain optimized for live usage
+  * `state.bearOriginPrice`
+  * `state.bearLowestPrice`
+* `state.bearHasOrigin = true`
+* `state.bearHasTentativeHL = false`
+* NO threshold calculations
+* NO LL/HL distinction
+* NO contraction logic
+
+When `state.dirState == BULL_LOCKED`:
+
+* EVERY high pivot must immediately become:
+
+  * `state.bullOriginPrice`
+  * `state.bullHighestPrice`
+* `state.bullHasOrigin = true`
+* `state.bullHasTentativeLH = false`
+* NO threshold calculations
+* NO HH/LH distinction
+* NO contraction logic
+
+# Important
+
+Do NOT redesign the engine.
+
+Do NOT change:
+
+* drawing logic
+* object naming
+* OnCalculate()
+* UpdateMarketStructure()
+* pivot detection
+
+Only modify the state-handling logic inside `ProcessPivot()`.
+
+# Expected Result
+
+Sequence:
+
+OriginHH [110000]
+OriginLL [100000]
+LL1 [88980]
+HH1 [150134] -> threshold -> BULL_LOCKED
+LL2 [47110] -> threshold -> BEAR_LOCKED
+HL1 [72360]
+HH2 [165025]
+LH1 [149560]
+HH3 [150295]
+HL2 [138680]
+
+Expected:
+
+* Lime line at HH1 only
+* Red line at LL2 only
+* NO red line at HL1
+* HL1 and HL2 automatically become new OriginLL because BEAR_LOCKED ignores LL/HL distinction
+* HH2 does NOT trigger threshold because:
+  165025 - 150134 = 14891 < 24000
