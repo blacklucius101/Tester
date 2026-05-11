@@ -141,6 +141,12 @@ struct ExpansionEngineState
    double            bearTentativeHLPrice;
    bool              bearHasTentativeHL;
 
+   datetime          lastProcessedHighTime;
+   double            lastProcessedHighPrice;
+
+   datetime          lastProcessedLowTime;
+   double            lastProcessedLowPrice;
+
    datetime          lastDay;
    
    void Reset(datetime time)
@@ -156,6 +162,11 @@ struct ExpansionEngineState
       bearLowestPrice = 0;
       bearHasTentativeHL = false;
       bearTentativeHLPrice = 0;
+
+      lastProcessedHighTime = 0;
+      lastProcessedHighPrice = 0;
+      lastProcessedLowTime = 0;
+      lastProcessedLowPrice = 0;
       
       MqlDateTime dt;
       TimeToStruct(time, dt);
@@ -366,44 +377,47 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
      {
       // 1. Structural confirmation for Bearish reset
       // A tentative HL becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 High semafor forms afterward.
-      if(state.bearHasTentativeHL)
+      if(state.dirState != BEAR_LOCKED)
         {
-         // At reset: establish a new expansion origin; restart accumulation from the new structure
-         state.bearHasOrigin = true;
-         state.bearOriginPrice = state.bearTentativeHLPrice;
-         state.bearLowestPrice = state.bearTentativeHLPrice;
-         state.bearHasTentativeHL = false;
+         if(state.bearHasTentativeHL)
+           {
+            // At reset: establish a new expansion origin; restart accumulation from the new structure
+            state.bearHasOrigin = true;
+            state.bearOriginPrice = state.bearTentativeHLPrice;
+            state.bearLowestPrice = state.bearTentativeHLPrice;
+            state.bearHasTentativeHL = false;
+           }
         }
 
       // 2. Bullish logic
-      if(!state.bullHasOrigin)
+      if(state.dirState != BULL_LOCKED)
         {
-         state.bullHasOrigin = true;
-         state.bullOriginPrice = price;
-         state.bullHighestPrice = price;
-         state.bullHasTentativeLH = false;
-        }
-      else
-        {
-         if(price >= state.bullHighestPrice)
+         if(!state.bullHasOrigin)
            {
+            state.bullHasOrigin = true;
+            state.bullOriginPrice = price;
             state.bullHighestPrice = price;
             state.bullHasTentativeLH = false;
-
-            if(state.dirState != BULL_LOCKED)
+           }
+         else
+           {
+            if(price >= state.bullHighestPrice)
               {
-               double distance = MathAbs(state.bullHighestPrice - state.bullOriginPrice) / _Point;
+               state.bullHighestPrice = price;
+               state.bullHasTentativeLH = false;
+
+               double distance = (state.bullHighestPrice - state.bullOriginPrice) / _Point;
                if(distance >= 24000)
                  {
                   DrawExpansionLine("HH", time);
                   state.dirState = BULL_LOCKED;
                  }
               }
-           }
-         else
-           {
-            state.bullHasTentativeLH = true;
-            state.bullTentativeLHPrice = price;
+            else
+              {
+               state.bullHasTentativeLH = true;
+               state.bullTentativeLHPrice = price;
+              }
            }
         }
      }
@@ -411,44 +425,47 @@ void ProcessPivot(ExpansionEngineState &state, bool isHigh, double price, dateti
      {
       // 1. Structural confirmation for Bullish reset
       // A tentative LH becomes STRUCTURALLY CONFIRMED ONLY IF: a Level 2 Low semafor forms afterward.
-      if(state.bullHasTentativeLH)
+      if(state.dirState != BULL_LOCKED)
         {
-         // At reset: establish a new expansion origin; restart accumulation from the new structure
-         state.bullHasOrigin = true;
-         state.bullOriginPrice = state.bullTentativeLHPrice;
-         state.bullHighestPrice = state.bullTentativeLHPrice;
-         state.bullHasTentativeLH = false;
+         if(state.bullHasTentativeLH)
+           {
+            // At reset: establish a new expansion origin; restart accumulation from the new structure
+            state.bullHasOrigin = true;
+            state.bullOriginPrice = state.bullTentativeLHPrice;
+            state.bullHighestPrice = state.bullTentativeLHPrice;
+            state.bullHasTentativeLH = false;
+           }
         }
 
       // 2. Bearish logic
-      if(!state.bearHasOrigin)
+      if(state.dirState != BEAR_LOCKED)
         {
-         state.bearHasOrigin = true;
-         state.bearOriginPrice = price;
-         state.bearLowestPrice = price;
-         state.bearHasTentativeHL = false;
-        }
-      else
-        {
-         if(price <= state.bearLowestPrice)
+         if(!state.bearHasOrigin)
            {
+            state.bearHasOrigin = true;
+            state.bearOriginPrice = price;
             state.bearLowestPrice = price;
             state.bearHasTentativeHL = false;
-
-            if(state.dirState != BEAR_LOCKED)
+           }
+         else
+           {
+            if(price <= state.bearLowestPrice)
               {
-               double distance = MathAbs(state.bearOriginPrice - state.bearLowestPrice) / _Point;
+               state.bearLowestPrice = price;
+               state.bearHasTentativeHL = false;
+
+               double distance = (state.bearOriginPrice - state.bearLowestPrice) / _Point;
                if(distance >= 24000)
                  {
                   DrawExpansionLine("LL", time);
                   state.dirState = BEAR_LOCKED;
                  }
               }
-           }
-         else
-           {
-            state.bearHasTentativeHL = true;
-            state.bearTentativeHLPrice = price;
+            else
+              {
+               state.bearHasTentativeHL = true;
+               state.bearTentativeHLPrice = price;
+              }
            }
         }
      }
@@ -509,7 +526,7 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
    else if(current.time == state[1].time)
      {
       // Case 1: Existing pivot update
-      if(MathAbs(current.price - state[1].price) > _Point / 10.0)
+      if(MathAbs(current.price - state[1].price) > _Point)
         {
          state[1].price = current.price;
          ObjectDelete(0, prefix + "LATEST");
@@ -713,9 +730,30 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
       
       // Also process the current mutable pivot for threshold breach
       if(HighState[1].time != 0)
-         ProcessPivot(EEState, true, HighState[1].price, HighState[1].time);
+        {
+         bool highChanged = HighState[1].time != EEState.lastProcessedHighTime ||
+                            MathAbs(HighState[1].price - EEState.lastProcessedHighPrice) >= _Point;
+
+         if(highChanged)
+           {
+            ProcessPivot(EEState, true, HighState[1].price, HighState[1].time);
+            EEState.lastProcessedHighTime = HighState[1].time;
+            EEState.lastProcessedHighPrice = HighState[1].price;
+           }
+        }
+
       if(LowState[1].time != 0)
-         ProcessPivot(EEState, false, LowState[1].price, LowState[1].time);
+        {
+         bool lowChanged = LowState[1].time != EEState.lastProcessedLowTime ||
+                           MathAbs(LowState[1].price - EEState.lastProcessedLowPrice) >= _Point;
+
+         if(lowChanged)
+           {
+            ProcessPivot(EEState, false, LowState[1].price, LowState[1].time);
+            EEState.lastProcessedLowTime = LowState[1].time;
+            EEState.lastProcessedLowPrice = LowState[1].price;
+           }
+        }
      }
 
    return(rates_total);
