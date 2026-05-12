@@ -1,155 +1,410 @@
-You are modifying an MT5 indicator expansion engine inside `ProcessPivot()`.
+Modify the existing MT5 indicator `MOD_3_Level_ZZ_Semafor.mq5` by extending the current realtime market structure engine with a directional expansion threshold engine.
 
-The current implementation incorrectly treats `BULL_LOCKED` and `BEAR_LOCKED` as fully inactive states. This causes stale expansion origins to persist and later trigger false threshold events.
+IMPORTANT:
+Do NOT build a separate pivot-processing engine using direct scans of `HighBuffer2[]` or `LowBuffer2[]`.
 
-You must preserve the existing architecture and only modify the state behavior logic inside `ProcessPivot()`.
+The indicator already contains a realtime pivot lifecycle/state engine using:
 
-# Intended State Semantics
+```
+HighState[2]
+LowState[2]
+```
 
-## WAITING
+and the function:
 
-* Initial state at the start of a new day.
-* No pivots processed yet.
+```
+UpdateMarketStructure()
+```
 
-## BULL_LOCKED
+This existing engine already handles:
 
-Meaning:
+* mutable ZigZag pivots
+* pivot replacement
+* pivot confirmation
+* structural transitions
+* historical replay reconstruction
 
-* Bullish expansion accumulation is frozen.
-* Bearish expansion processing remains active.
+The modification must reuse this architecture as much as possible.
 
-Behavior:
+The current structure engine is the canonical source of pivot state.
 
-* Every new HIGH pivot automatically becomes the new bullish origin.
-* No distinction between HH and LH while frozen.
-* No bullish threshold calculations while frozen.
-* Bullish contraction logic is disabled while frozen.
-* Bearish logic continues normally.
+The new expansion engine must:
 
-Example:
-If HH1 triggers threshold:
+* consume finalized structural transitions from the existing state engine
+* NOT independently rescan ZigZag buffers to determine structure
+* NOT create duplicate pivot lifecycle logic
 
-* plot lime vertical line at HH1
-* state becomes BULL_LOCKED
-* OriginHH shifts to HH1
+Existing structure interpretation logic already determines:
 
-Then:
+* higher high (HH)
+* lower high (LH)
+* lower low (LL)
+* higher low (HL)
 
-* HH2 automatically becomes new OriginHH
-* LH1 automatically becomes new OriginHH
-* no bullish expansion accumulation occurs
+These calculations are already implicitly performed for structure-line coloring and transition handling.
 
-Bearish side continues operating normally.
+Reuse that logic.
+
+Add a directional expansion accumulation engine using:
+
+* Level 2 highs (`HighState`)
+* Level 2 lows (`LowState`)
+
+The engine accumulates same-direction expansion until:
+
+* threshold exceeded
+  OR
+* confirmed contraction invalidates accumulation
+
+Threshold:
+
+```
+24000 points
+```
+
+Signals:
+
+* bullish threshold → lime dotted vertical line
+* bearish threshold → red dotted vertical line
+
+Vertical lines are immutable once drawn.
+
+Use aggressive realtime triggering.
+
+Signals may be emitted from mutable/latest pivots.
+
+If a pivot later repaints/disappears:
+
+* DO NOT remove prior vertical lines
+* DO NOT retroactively rebuild signals
+* DO NOT reevaluate previously emitted events
+
+Signals are event-based and immutable.
+
+Historical reconstruction does NOT need to perfectly reproduce realtime chronology.
+
+At the start of each broker server day:
+
+* reset bullish accumulation
+* reset bearish accumulation
+* reset bullish lock
+* reset bearish lock
+* reset expansion-state variables
+
+Pivots from previous broker days must not participate in expansion evaluation for the new day.
+
+Use broker server day boundaries.
+
+The engine must remain lightweight.
+
+Continue using:
+
+```
+HighState[2]
+LowState[2]
+```
+
+Do NOT introduce:
+
+* deep pivot arrays
+* historical pivot chains
+* independent pivot reconstruction systems
+
+Pivot classification mutates throughout a pivot’s lifecycle.
+
+A pivot’s HH/LH/LL/HL classification is continuously updated while it is the current/latest pivot.
+
+By the time a pivot becomes the previous pivot:
+
+* its classification is already finalized
+* its structural role is already known
+
+The expansion engine must consume these finalized classifications from the existing structure engine.
+
+Do NOT define contraction as:
+
+```
+currentHigh < previousHigh
+```
+
+in realtime.
+
+That would incorrectly reset accumulation using mutable/unconfirmed pivots.
+
+Instead:
+
+A contraction is only considered confirmed when the PREVIOUS pivot has already finalized as:
+
+* LH for highs
+* HL for lows
+
+The expansion engine must use finalized pivot classification state from the structure engine.
+
+For high pivots:
+
+Maintain:
+
+```
+double bullishStored
+bool bullishLock
+```
+
+Initial:
+
+```
+bullishStored = 0;
+bullishLock = false;
+```
+
+Bullish evaluation allowed ONLY when:
+
+```
+bullishLock == false
+```
 
 ---
 
-## BEAR_LOCKED
+## BULLISH EXPANSION
 
-Meaning:
+When the current structure transition confirms bullish continuation:
 
-* Bearish expansion accumulation is frozen.
-* Bullish expansion processing remains active.
-
-Behavior:
-
-* Every new LOW pivot automatically becomes the new bearish origin.
-* No distinction between LL and HL while frozen.
-* No bearish threshold calculations while frozen.
-* Bearish contraction logic is disabled while frozen.
-* Bullish logic continues normally.
-
-Example:
-If LL2 triggers threshold:
-
-* plot red vertical line at LL2
-* state becomes BEAR_LOCKED
-* OriginLL shifts to LL2
-
-Then:
-
-* HL1 automatically becomes new OriginLL
-* HL2 automatically becomes new OriginLL
-* no bearish expansion accumulation occurs
-
-Bullish side continues operating normally.
-
-# Required Fix
-
-Currently the code does this:
-
-```cpp
-if(state.dirState != BEAR_LOCKED)
-{
-   // bearish logic
-}
+```
+HH (equal high is considered a HH)
 ```
 
-and similarly for bullish logic.
+then:
 
-This is WRONG because frozen sides stop updating origins entirely.
+```
+delta = currentHigh.price - previousHigh.price;
+```
 
-You must replace this behavior with:
+ONLY positive deltas may accumulate:
 
-# Correct Behavior For Frozen Side
+```
+if(delta > 0)
+    bullishStored += delta;
+```
 
-When `state.dirState == BEAR_LOCKED`:
+Negative values must NEVER be added.
 
-* EVERY low pivot must immediately become:
+After accumulation:
 
-  * `state.bearOriginPrice`
-  * `state.bearLowestPrice`
-* `state.bearHasOrigin = true`
-* `state.bearHasTentativeHL = false`
-* NO threshold calculations
-* NO LL/HL distinction
-* NO contraction logic
+If:
 
-When `state.dirState == BULL_LOCKED`:
+```
+bullishStored >= 24000
+```
 
-* EVERY high pivot must immediately become:
+then:
 
-  * `state.bullOriginPrice`
-  * `state.bullHighestPrice`
-* `state.bullHasOrigin = true`
-* `state.bullHasTentativeLH = false`
-* NO threshold calculations
-* NO HH/LH distinction
-* NO contraction logic
+* plot lime dotted vertical line
+* set:
 
-# Important
+```
+bullishLock = true;
+bearishLock = false;
+```
 
-Do NOT redesign the engine.
+* reset:
 
-Do NOT change:
+```
+bullishStored = 0;
+```
 
-* drawing logic
-* object naming
-* OnCalculate()
-* UpdateMarketStructure()
-* pivot detection
+After bullish lock:
 
-Only modify the state-handling logic inside `ProcessPivot()`.
+* no further bullish accumulation
+* no bullish threshold evaluation
+* bullish contractions ignored while locked
 
-# Expected Result
+---
 
-Sequence:
+## BULLISH CONTRACTION
 
-OriginHH [110000]
-OriginLL [100000]
-LL1 [88980]
-HH1 [150134] -> threshold -> BULL_LOCKED
-LL2 [47110] -> threshold -> BEAR_LOCKED
-HL1 [72360]
-HH2 [165025]
-LH1 [149560]
-HH3 [150295]
-HL2 [138680]
+A bullish contraction is NOT evaluated from the mutable current pivot.
 
-Expected:
+A contraction becomes valid only when:
 
-* Lime line at HH1 only
-* Red line at LL2 only
-* NO red line at HL1
-* HL1 and HL2 automatically become new OriginLL because BEAR_LOCKED ignores LL/HL distinction
-* HH2 does NOT trigger threshold because:
-  165025 - 150134 = 14891 < 24000
+```
+the previous high pivot finalized as LH
+```
+
+When a confirmed LH exists AND:
+
+```
+bullishLock == false
+```
+
+then:
+
+```
+bullishStored = 0;
+```
+
+The contraction itself is NOT accumulated negatively.
+
+It acts only as an accumulation invalidation/reset.
+
+---
+
+Mirror logic for low pivots.
+
+Maintain:
+
+```
+double bearishStored
+bool bearishLock
+```
+
+Initial:
+
+```
+bearishStored = 0;
+bearishLock = false;
+```
+
+Bearish evaluation allowed ONLY when:
+
+```
+bearishLock == false
+```
+
+---
+
+## BEARISH EXPANSION
+
+When the current structure transition confirms bearish continuation:
+
+```
+LL (equal low is considered a LL)  
+```
+
+then:
+
+```
+delta = previousLow.price - currentLow.price;
+```
+
+ONLY positive deltas may accumulate:
+
+```
+if(delta > 0)
+    bearishStored += delta;
+```
+
+If:
+
+```
+bearishStored >= 24000
+```
+
+then:
+
+* plot red dotted vertical line
+* set:
+
+```
+bearishLock = true;
+bullishLock = false;
+```
+
+* reset:
+
+```
+bearishStored = 0;
+```
+
+---
+
+## BEARISH CONTRACTION
+
+A bearish contraction becomes valid only when:
+
+```
+the previous low pivot finalized as HL
+```
+
+When confirmed HL exists AND:
+
+```
+bearishLock == false
+```
+
+then:
+
+```
+bearishStored = 0;
+```
+
+Negative values are never accumulated.
+
+---
+
+Historical replay must:
+
+* process pivots sequentially
+* reuse the same structure engine logic
+* preserve:
+
+  * accumulation
+  * reset logic
+  * lock state
+  * daily reset behavior
+
+When threshold exceeded historically:
+
+* plot the vertical line at the pivot anchor time/index where the exceeding pivot occurred
+
+Realtime mode must:
+
+* process only newly detected structure transitions
+* never retroactively rebuild emitted signals
+
+When threshold exceeded realtime:
+
+* immediately plot the vertical line at the moment threshold exceeded
+
+Realtime signals remain immutable permanently.
+
+When both evaluations occur during the same calculation cycle:
+
+1. process highs first
+2. process lows second
+
+Bullish threshold:
+
+* color: Lime
+* style: dotted
+* object type: OBJ_VLINE
+
+Bearish threshold:
+
+* color: Red
+* style: dotted
+* object type: OBJ_VLINE
+
+Object names must be deterministic and unique.
+
+Recommended:
+
+```
+EXP_BULL_<time>
+EXP_BEAR_<time>
+```
+
+Do NOT:
+
+* remove existing market structure functionality
+* alter ZigZag settings
+* duplicate pivot lifecycle logic
+* create independent pivot scanners
+* retroactively mutate emitted vertical lines
+* allow duplicate signals after lock activation
+
+The implementation must remain:
+
+* lightweight
+* realtime-safe
+* replay-safe
+* deterministic
+* fully integrated into the existing state engine.
