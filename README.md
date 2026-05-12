@@ -32,7 +32,9 @@ Existing structure interpretation should be modified or used as is to determine:
 * lower low (LL)
 * higher low (HL)
 
-For example, these calculations are already implicitly performed for structure-line coloring and transition handling. The state (HH, LH, LL, HL) could be infered and stored as part of the swing info. Example: for high pivots, lime segment is a HH, and red segment is a LH.
+For example, these calculations are already implicitly performed for structure-line coloring and transition handling. The state (HH, LH, LL, HL) could be infered and stored as part of the swing info. Example:
+- for high pivots, lime segment is a HH, and red segment is a LH.
+- for low pivots, red segment is a LL, and lime segment is a HH.
 
 Add a directional expansion accumulation engine using:
 
