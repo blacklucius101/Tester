@@ -1,8 +1,5 @@
 Modify the existing MT5 indicator `MOD_3_Level_ZZ_Semafor.mq5` by extending the current realtime market structure engine with a directional expansion threshold engine.
 
-IMPORTANT:
-Do NOT build a separate pivot-processing engine using direct scans of `HighBuffer2[]` or `LowBuffer2[]`.
-
 The indicator already contains a realtime pivot lifecycle/state engine using:
 
 ```
@@ -24,26 +21,18 @@ This existing engine already handles:
 * structural transitions
 * historical replay reconstruction
 
-The modification must reuse this architecture as much as possible.
+The modification must reuse and extend this architecture as much as possible.
 
 The current structure engine is the canonical source of pivot state.
 
-The new expansion engine must:
-
-* consume finalized structural transitions from the existing state engine
-* NOT independently rescan ZigZag buffers to determine structure
-* NOT create duplicate pivot lifecycle logic
-
-Existing structure interpretation logic already determines:
+Existing structure interpretation should be modified or used as is to determine:
 
 * higher high (HH)
 * lower high (LH)
 * lower low (LL)
 * higher low (HL)
 
-These calculations are already implicitly performed for structure-line coloring and transition handling.
-
-Reuse that logic.
+For example, these calculations are already implicitly performed for structure-line coloring and transition handling. The state (HH, LH, LL, HL) could be infered and stored as part of the swing info. Example: for high pivots, lime segment is a HH, and red segment is a LH.
 
 Add a directional expansion accumulation engine using:
 
@@ -110,7 +99,7 @@ Do NOT introduce:
 * historical pivot chains
 * independent pivot reconstruction systems
 
-Pivot classification mutates throughout a pivot’s lifecycle.
+Pivot classification mutates throughout a pivot’s lifecycle similar to the segment coloring.
 
 A pivot’s HH/LH/LL/HL classification is continuously updated while it is the current/latest pivot.
 
@@ -133,12 +122,9 @@ That would incorrectly reset accumulation using mutable/unconfirmed pivots.
 
 Instead:
 
-A contraction is only considered confirmed when the PREVIOUS pivot has already finalized as:
+A contraction is only considered confirmed when the `LH for highs` or `HL for lows` becomes the PREVIOUS pivot, ie. a new current pivot is formed. 
 
-* LH for highs
-* HL for lows
-
-The expansion engine must use finalized pivot classification state from the structure engine.
+The expansion engine must use stored pivot classification state from the structure engine.
 
 For high pivots:
 
@@ -178,14 +164,12 @@ then:
 delta = currentHigh.price - previousHigh.price;
 ```
 
-ONLY positive deltas may accumulate:
+ONLY positive deltas may accumulate. Negative values must NEVER be added. This prevents mutable contractions from resetting `bullishStored`:
 
 ```
 if(delta > 0)
     bullishStored += delta;
 ```
-
-Negative values must NEVER be added.
 
 After accumulation:
 
@@ -407,4 +391,4 @@ The implementation must remain:
 * realtime-safe
 * replay-safe
 * deterministic
-* fully integrated into the existing state engine.
+* fully integrated with the existing state engine.
