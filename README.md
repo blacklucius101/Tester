@@ -41,6 +41,10 @@ Add a directional expansion accumulation engine using:
 * Level 2 highs (`HighState`)
 * Level 2 lows (`LowState`)
 
+The current/latest pivot is mutable. The previous pivot is finalized.
+
+A pivot becomes finalized ONLY after: a new current pivot replaces it.
+
 The engine accumulates same-direction expansion until:
 
 * threshold exceeded
@@ -71,6 +75,24 @@ If a pivot later repaints/disappears:
 * DO NOT reevaluate previously emitted events
 
 Signals are event-based and immutable.
+
+The expansion engine must explicitly separate:
+1. finalized accumulation state
+2. realtime projected accumulation state
+
+This separation is REQUIRED because ZigZag pivots are mutable and may:
+
+* extend
+* relocate
+* repaint
+* disappear
+* change classification
+
+throughout their lifecycle.
+
+The engine must support realtime threshold triggering from mutable pivots without permanently double-counting mutable expansion.
+
+Do NOT permanently accumulate mutable pivot expansion repeatedly on every recalculation. That approach causes accumulation inflation because the mutable pivot continuously evolves while remaining the same pivot.
 
 Historical reconstruction does NOT need to perfectly reproduce realtime chronology.
 
@@ -153,6 +175,28 @@ bullishLock == false
 ---
 
 ## BULLISH EXPANSION
+Realtime bullish threshold evaluation must occur continuously during mutable HH evolution.
+
+However, the mutable HH contribution must not be repeatedly accumulated permanently.
+
+The engine must therefore use `bullishProjected` for realtime threshold evaluation. and bullishStored ONLY for finalized confirmed accumulation.
+
+Realtime projected bullish expansion should behave conceptually as: `bullishProjected = bullishStored + (currentHigh.price - previousHigh.price)`
+
+However, `bullishStored` must only permanently accumulate once the pivot becomes finalized.
+
+The engine must NEVER repeatedly add evolving mutable expansion directly into permanent storage.
+
+Where:
+
+- previousHigh is finalized
+- currentHigh is mutable
+
+Threshold checks may use: `bullishProjected` since realtime triggering is allowed from mutable pivots.
+
+Permanent accumulation must remain independent from mutable pivot identity.
+
+When the mutable pivot eventually finalizes, ONLY the finalized delta should be permanently committed once.
 
 When the current structure transition confirms bullish continuation:
 
@@ -258,6 +302,28 @@ bearishLock == false
 ---
 
 ## BEARISH EXPANSION
+Realtime bearish threshold evaluation must occur continuously during mutable LL evolution.
+
+However, the mutable LL contribution must not be repeatedly accumulated permanently.
+
+The engine must therefore use `bearishProjected` for realtime threshold evaluation. and bearishStored ONLY for finalized confirmed accumulation.
+
+Realtime projected bullish expansion should behave conceptually as: `bearishProjected = bearishStored + (previousLow.price - currentLow.price)`
+
+However, `bearishStored` must only permanently accumulate once the pivot becomes finalized.
+
+The engine must NEVER repeatedly add evolving mutable expansion directly into permanent storage.
+
+Where:
+
+- previousLow is finalized
+- currentLow is mutable
+
+Threshold checks may use: `bearishProjected` since realtime triggering is allowed from mutable pivots.
+
+Permanent accumulation must remain independent from mutable pivot identity.
+
+When the mutable pivot eventually finalizes, ONLY the finalized delta should be permanently committed once.
 
 When the current structure transition confirms bearish continuation:
 
