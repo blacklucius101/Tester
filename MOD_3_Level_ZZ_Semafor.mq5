@@ -106,21 +106,11 @@ input int PixelOffset=-8; // Offset for arrows in pixels
 //+------------------------------------------------------------------+
 //|  Market Structure Structures                                     |
 //+------------------------------------------------------------------+
-enum ENUM_PIVOT_CLASS
-  {
-   CLASS_NONE,
-   CLASS_HH,
-   CLASS_LH,
-   CLASS_LL,
-   CLASS_HL
-  };
-
 struct SwingInfo
   {
    int               barIndex;
    datetime          time;
    double            price;
-   ENUM_PIVOT_CLASS  classification;
   };
 
 //+----------------------------------------------+
@@ -131,14 +121,6 @@ double HighBuffer2[],LowBuffer2[];
 double HighBuffer3[],LowBuffer3[];
 //---- market structure swing storage
 static SwingInfo HighState[2], LowState[2];
-
-//---- Expansion engine state
-double   bullishStored = 0;
-bool     bullishLock   = false;
-double   bearishStored = 0;
-bool     bearishLock   = false;
-datetime lastResetDay  = 0;
-const int EXPANSION_THRESHOLD = 24000;
 //---- declaration of the integer variables for the start of data calculation
 int StartBar1,StartBar2,StartBar3,StartBar;
 //---- declaration of variables for storing indicators handles
@@ -255,8 +237,6 @@ void OnDeinit(const int reason)
   {
    DeleteObjectsByPrefix("MS_H_");
    DeleteObjectsByPrefix("MS_L_");
-   DeleteObjectsByPrefix("EXP_BULL_");
-   DeleteObjectsByPrefix("EXP_BEAR_");
   }
 //+------------------------------------------------------------------+
 //| Deletes objects by prefix                                        |
@@ -293,153 +273,6 @@ void DrawStructureSegment(string prefix, SwingInfo &s1, SwingInfo &s2, bool isLa
    ObjectSetInteger(0, txtName, OBJPROP_FONTSIZE, 15);
    ObjectSetInteger(0, txtName, OBJPROP_ANCHOR, (prefix == "MS_H_") ? ANCHOR_BOTTOM : ANCHOR_TOP);
    ObjectSetInteger(0, txtName, OBJPROP_SELECTABLE, false);
-  }
-//+------------------------------------------------------------------+
-//| Helpers for Expansion Engine                                     |
-//+------------------------------------------------------------------+
-bool IsSameDay(datetime t1, datetime t2)
-  {
-   MqlDateTime dt1, dt2;
-   if(t1 == 0 || t2 == 0) return false;
-   TimeToStruct(t1, dt1);
-   TimeToStruct(t2, dt2);
-   return (dt1.year == dt2.year && dt1.mon == dt2.mon && dt1.day == dt2.day);
-  }
-
-void CheckDailyReset(datetime currentTime)
-  {
-   MqlDateTime dt;
-   TimeToStruct(currentTime, dt);
-   dt.hour = 0; dt.min = 0; dt.sec = 0;
-   datetime dayStart = StructToTime(dt);
-
-   if(dayStart != lastResetDay)
-     {
-      bullishStored = 0;
-      bullishLock = false;
-      bearishStored = 0;
-      bearishLock = false;
-      lastResetDay = dayStart;
-     }
-  }
-
-void TriggerExpansionSignal(bool isBullish, datetime time)
-  {
-   string prefix = isBullish ? "EXP_BULL_" : "EXP_BEAR_";
-   string name = prefix + IntegerToString((long)time);
-
-   if(ObjectFind(0, name) >= 0) return;
-
-   if(ObjectCreate(0, name, OBJ_VLINE, 0, time, 0))
-     {
-      ObjectSetInteger(0, name, OBJPROP_COLOR, isBullish ? clrLime : clrRed);
-      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DOT);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, name, OBJPROP_BACK, true);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-     }
-  }
-
-void HandlePivotFinalization(string prefix, SwingInfo &finalizedPivot, SwingInfo &previousFinalized)
-  {
-   if(!IsSameDay(finalizedPivot.time, lastResetDay)) return;
-   if(previousFinalized.time == 0 || !IsSameDay(previousFinalized.time, lastResetDay)) return;
-
-   if(prefix == "MS_H_")
-     {
-      if(finalizedPivot.price >= previousFinalized.price)
-         finalizedPivot.classification = CLASS_HH;
-      else
-         finalizedPivot.classification = CLASS_LH;
-
-      if(!bullishLock)
-        {
-         if(finalizedPivot.classification == CLASS_HH)
-           {
-            double delta = finalizedPivot.price - previousFinalized.price;
-            if(delta > 0) bullishStored += delta;
-
-            if(bullishStored >= EXPANSION_THRESHOLD * _Point)
-              {
-               TriggerExpansionSignal(true, finalizedPivot.time);
-               bullishLock = true;
-               bearishLock = false;
-               bullishStored = 0;
-              }
-           }
-         else if(finalizedPivot.classification == CLASS_LH)
-           {
-            bullishStored = 0;
-           }
-        }
-     }
-   else if(prefix == "MS_L_")
-     {
-      if(finalizedPivot.price <= previousFinalized.price)
-         finalizedPivot.classification = CLASS_LL;
-      else
-         finalizedPivot.classification = CLASS_HL;
-
-      if(!bearishLock)
-        {
-         if(finalizedPivot.classification == CLASS_LL)
-           {
-            double delta = previousFinalized.price - finalizedPivot.price;
-            if(delta > 0) bearishStored += delta;
-
-            if(bearishStored >= EXPANSION_THRESHOLD * _Point)
-              {
-               TriggerExpansionSignal(false, finalizedPivot.time);
-               bearishLock = true;
-               bullishLock = false;
-               bearishStored = 0;
-              }
-           }
-         else if(finalizedPivot.classification == CLASS_HL)
-           {
-            bearishStored = 0;
-           }
-        }
-     }
-  }
-
-void HandleRealtimeProjection(string prefix, SwingInfo &mutablePivot, SwingInfo &finalizedPivot)
-  {
-   if(mutablePivot.time == 0 || finalizedPivot.time == 0) return;
-   if(!IsSameDay(mutablePivot.time, lastResetDay) || !IsSameDay(finalizedPivot.time, lastResetDay)) return;
-
-   if(prefix == "MS_H_")
-     {
-      if(bullishLock) return;
-
-      if(mutablePivot.price >= finalizedPivot.price)
-        {
-         double projected = bullishStored + (mutablePivot.price - finalizedPivot.price);
-         if(projected >= EXPANSION_THRESHOLD * _Point)
-           {
-            TriggerExpansionSignal(true, mutablePivot.time);
-            bullishLock = true;
-            bearishLock = false;
-            bullishStored = 0;
-           }
-        }
-     }
-   else if(prefix == "MS_L_")
-     {
-      if(bearishLock) return;
-
-      if(mutablePivot.price <= finalizedPivot.price)
-        {
-         double projected = bearishStored + (finalizedPivot.price - mutablePivot.price);
-         if(projected >= EXPANSION_THRESHOLD * _Point)
-           {
-            TriggerExpansionSignal(false, mutablePivot.time);
-            bearishLock = true;
-            bullishLock = false;
-            bearishStored = 0;
-           }
-        }
-     }
   }
 //+------------------------------------------------------------------+
 //| Helper to update market structure incrementally                  |
@@ -528,10 +361,7 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
          ObjectDelete(0, prefix + "LATEST");
          ObjectDelete(0, prefix + "TXT_LATEST");
          if(state[0].time != 0)
-           {
             DrawStructureSegment(prefix, state[0], state[1], false); // Freeze previous
-            HandlePivotFinalization(prefix, state[1], state[0]);
-           }
 
          state[0] = state[1];
          state[1] = current;
@@ -569,7 +399,6 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
             DrawStructureSegment(prefix, state[0], state[1], true);
         }
      }
-   HandleRealtimeProjection(prefix, state[1], state[0]);
   }
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
@@ -624,13 +453,8 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
      {
       DeleteObjectsByPrefix("MS_H_");
       DeleteObjectsByPrefix("MS_L_");
-      DeleteObjectsByPrefix("EXP_BULL_");
-      DeleteObjectsByPrefix("EXP_BEAR_");
       ZeroMemory(HighState);
       ZeroMemory(LowState);
-      bullishStored = 0; bullishLock = false;
-      bearishStored = 0; bearishLock = false;
-      lastResetDay = 0;
 
       int hCount = 0, lCount = 0;
       SwingInfo tempHigh[], tempLow[];
@@ -656,64 +480,28 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
            }
         }
 
-      // 2. Process chronological history for expansion engine
-      // We process highs and lows mixed by time to respect inter-pivots day resets
-      int hIdx = 0, lIdx = 0;
-      SwingInfo lastH, lastL;
-      ZeroMemory(lastH); ZeroMemory(lastL);
-
-      while(hIdx < hCount || lIdx < lCount)
-        {
-         bool processHigh = false;
-         if(hIdx < hCount && lIdx < lCount)
-           {
-            if(tempHigh[hIdx].time <= tempLow[lIdx].time) processHigh = true;
-           }
-         else if(hIdx < hCount) processHigh = true;
-
-         if(processHigh)
-           {
-            CheckDailyReset(tempHigh[hIdx].time);
-            if(lastH.time != 0) HandlePivotFinalization("MS_H_", tempHigh[hIdx], lastH);
-            lastH = tempHigh[hIdx];
-            hIdx++;
-           }
-         else
-           {
-            CheckDailyReset(tempLow[lIdx].time);
-            if(lastL.time != 0) HandlePivotFinalization("MS_L_", tempLow[lIdx], lastL);
-            lastL = tempLow[lIdx];
-            lIdx++;
-           }
-        }
-
-      // 3. Draw all historical segments (except the very last one)
+      // 2. Draw all historical segments (except the very last one)
       for(int i = 1; i < hCount - 1; i++)
          DrawStructureSegment("MS_H_", tempHigh[i-1], tempHigh[i], false);
       for(int i = 1; i < lCount - 1; i++)
          DrawStructureSegment("MS_L_", tempLow[i-1], tempLow[i], false);
 
-      // 4. Store last two pivots and draw the latest mutable segment
+      // 3. Store last two pivots and draw the latest mutable segment
       if(hCount >= 2)
         {
          HighState[0] = tempHigh[hCount-2];
          HighState[1] = tempHigh[hCount-1];
          DrawStructureSegment("MS_H_", HighState[0], HighState[1], true);
-         // No need to call HandleRealtimeProjection here as it will be called in the next tick
-         // or we can call it now for the very first frame.
-         HandleRealtimeProjection("MS_H_", HighState[1], HighState[0]);
         }
       if(lCount >= 2)
         {
          LowState[0] = tempLow[lCount-2];
          LowState[1] = tempLow[lCount-1];
          DrawStructureSegment("MS_L_", LowState[0], LowState[1], true);
-         HandleRealtimeProjection("MS_L_", LowState[1], LowState[0]);
         }
      }
    else
      {
-      CheckDailyReset(times[0]);
       UpdateMarketStructure("MS_H_", HighState, HighBuffer2, times, StartBar2, rates_total);
       UpdateMarketStructure("MS_L_", LowState, LowBuffer2, times, StartBar2, rates_total);
      }
