@@ -1,13 +1,11 @@
-Refactor this MQL5 Donchian Channel indicator into a simplified “pure” Donchian implementation while preserving all existing visual bands and chart appearance.
+Refactor `Donchian Ultimate.mq5` MT5 indicator into a simplified implementation while preserving all existing visual band lines and zone fills and color scheme.
 
 Requirements:
 
 1. REMOVE the entire alert system
-
 * Remove all alert-related inputs
 * Remove all alert-related global variables
 * Remove all alert functions, including:
-
   * HandleAlerts()
   * IssueAlerts()
   * HasMidLineBullishCrossing()
@@ -20,9 +18,7 @@ Requirements:
 * Remove all alert message strings and state tracking
 
 2. REMOVE all multi-timeframe (MTF) support
-
 * Remove:
-
   * InpTimeframe input
   * Timeframe variable
   * deltaHighTF variable
@@ -33,18 +29,15 @@ Requirements:
 * The indicator should operate ONLY on the current chart timeframe
 
 3. REMOVE all alternative calculation modes
-
 * Delete ENUM_PRICE_TYPE entirely
 * Remove PriceType input
 * Remove all switch-case logic related to price calculation modes
 * Retain ONLY the classic Donchian calculation:
-
   * Upper Line = highest HIGH over InpPeriod
   * Lower Line = lowest LOW over InpPeriod
 
-4. RETAIN all 5 visual bands/lines and their visualization
-   Keep:
-
+4. RETAIN all 5 visual band lines and their visualization style
+Keep:
 * Upper Line
 * Lower Line
 * Mid Line
@@ -52,7 +45,6 @@ Requirements:
 * Support
 
 Keep:
-
 * existing colors
 * line styles
 * widths
@@ -61,15 +53,13 @@ Keep:
 * support/resistance zone rendering
 
 5. SIMPLIFY the calculation logic
-   Use only current timeframe data arrays:
-
+Use only current timeframe data arrays:
 * high[]
 * low[]
 * open[]
 * close[]
 
 Simplify calculations to:
-
 * Upper = highest high over period
 * Lower = lowest low over period
 * Mid = (Upper + Lower) / 2
@@ -77,7 +67,6 @@ Simplify calculations to:
 Resistance and Support bands should still be calculated and rendered exactly as before, but using only current timeframe data.
 
 6. CLEANUP
-
 * Remove unused variables
 * Remove dead code
 * Remove unnecessary comments
@@ -86,11 +75,9 @@ Resistance and Support bands should still be calculated and rendered exactly as 
 * Keep the code compile-safe for MT5 strict mode
 
 Goal:
-Create a lean, readable, maintainable Donchian indicator that preserves the full visual structure while removing:
-
+Create a lean, readable, maintainable Donchian indicator that preserves the full complete visual structure while removing:
 * alerts
 * MTF complexity
 * alternative price modes
-* unnecessary abstraction
 
 Ensure the resulting code compiles cleanly in the Metatrader 5 platform without tiggering any warnings or errors.
