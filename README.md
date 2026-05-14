@@ -300,4 +300,5 @@ The implementation must remain:
 * realtime-safe
 * replay-safe
 * deterministic
-* fully integrated with the existing state engine.
+* fully integrated with the existing state engine
+And must compile cleanly in the Metatrader 5 platform without triggering warnings or errors.
