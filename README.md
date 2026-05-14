@@ -172,19 +172,19 @@ Mirror logic for low pivots.
 Given the pivot sequence: LL1 → LL2 → [new day] → LL3 → LL4 → LL5. And two variables: stored, and current.
 • LL2 → [new day] → LL3: `LL3 - LL2` shouldn't be possible. Also, both `stored` and `current` variables are reset to 0 when price crosses the daily boundary.
 • LL3 → LL4: LL3 is the previous finalized pivot, LL4 is the current mutable pivot. To avoid redundant operations, segment label calculations (ie. `currentLow - previousLow`, converted to points) populate `current`, and then `(stored + current) >= 24000` is evaluated. If true, a red dotted vertical line is drawn at this candle and `stored` resets to 0 and further bearish expansion evaluation/accumulation is halted.
-• LL4 → LL5: new pivot detected, so `current` which at this moment still contains `HH4 - HH3`is added to stored (assuming threshold event wasn't triggered at the previous step). Then a new `current` is populated based on the current mutable pivot `LL5 - LL4`.
+• LL4 → LL5: new pivot detected, so `current` which at this moment still contains `LL4 - LL3`is added to stored (assuming threshold event wasn't triggered at the previous step). Then a new `current` is populated based on the current mutable pivot `LL5 - LL4`.
 
 Given the pivot sequence: [new day] → LL1 → LL2 → HL1 → LL3.
 • [new day] → LL1: `stored` resets to 0 the moment price crosses the daily boundary. expansion/ threshold evaluation not possible with only one pivot.
 • LL1 → LL2: `current` is `LL2 - LL1` which let's assume is <24000.
 • LL2 → HL1: `stored = current`. Then new `current` is calculated.
-• HL1 → LL3: if previous pivot is a contraction (ie. HL) then `stored` resets to 0, instead of adding in the `current`. Then new `current` is `HH3 - LH1`. If >24000 draw the red vertical line.
+• HL1 → LL3: if previous pivot is a contraction (ie. HL) then `stored` resets to 0, instead of adding in the `current`. Then new `current` is `LL3 - LH1`. If >24000 draw the red vertical line.
 
 Given the pivot sequence: LL1 → LL2 → HL1 → HL2 → LL3 .
  • LL1 → LL2: `current` is `LL2 - LL1` and threshold evaluation is done on `stored + current` which let's assume is >24000. Red vertical line is drawn and `stored` is reset to 0.
  • LL2 → HL1: The threshold event triggers a bearish lock which prevents accumulation of `stored`. New `current` is calculated.
  • HL1 → HL2: Contractions are accumulated separately, but only if the bearish lock has been triggered. Therefore, `stored_contraction = current`. Then new `current` is calculated. Contractions are informational-only and are not evaluated against any threshold. For now they're just calculated but remain unused beyond segment labeling.
- • HL2 → LL3: `stored` accumulation is blocked, so it is still effectively 0. `current` is calculated but only for segment labeling. Evaluation is unrequired when the lock has been triggered. HH pivot, even if mutable, will reset `stored_contraction`. This is because the same high pivot can only ever mutate higher.
+ • HL2 → LL3: `stored` accumulation is blocked, so it is still effectively 0. `current` is calculated but only for segment labeling. Evaluation is unrequired when the lock has been triggered. LL pivot, even if mutable, will reset `stored_contraction`. This is because the same high pivot can only ever mutate higher.
 
 ---
 stored_contraction resets when:
