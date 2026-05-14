@@ -104,6 +104,12 @@ input int LowSymbol3=163;
 input int PixelOffset=-8; // Offset for arrows in pixels
 
 //+------------------------------------------------------------------+
+//|  Expansion Engine Constants                                      |
+//+------------------------------------------------------------------+
+#define EXP_THRESHOLD 24000.0
+#define GV_PREFIX "M3LZZ_EXP_"
+
+//+------------------------------------------------------------------+
 //|  Market Structure Structures                                     |
 //+------------------------------------------------------------------+
 struct SwingInfo
@@ -123,8 +129,218 @@ double HighBuffer3[],LowBuffer3[];
 static SwingInfo HighState[2], LowState[2];
 //---- declaration of the integer variables for the start of data calculation
 int StartBar1,StartBar2,StartBar3,StartBar;
+//---- expansion engine state
+static double stored_high = 0;
+static double current_high = 0;
+static double stored_contraction_high = 0;
+static bool lock_bullish = false;
+
+static double stored_low = 0;
+static double current_low = 0;
+static double stored_contraction_low = 0;
+static bool lock_bearish = false;
+
+static datetime last_broker_day = 0;
 //---- declaration of variables for storing indicators handles
 int Handle1,Handle2,Handle3;
+//+------------------------------------------------------------------+
+//|  Global Variable Management                                      |
+//+------------------------------------------------------------------+
+void SyncGlobalVariables()
+  {
+   GlobalVariableSet(GV_PREFIX + "STORED_HIGH", stored_high);
+   GlobalVariableSet(GV_PREFIX + "CURRENT_HIGH", current_high);
+   GlobalVariableSet(GV_PREFIX + "CONTRACTION_HIGH", stored_contraction_high);
+   GlobalVariableSet(GV_PREFIX + "LOCK_BULLISH", (double)lock_bullish);
+   GlobalVariableSet(GV_PREFIX + "STORED_LOW", stored_low);
+   GlobalVariableSet(GV_PREFIX + "CURRENT_LOW", current_low);
+   GlobalVariableSet(GV_PREFIX + "CONTRACTION_LOW", stored_contraction_low);
+   GlobalVariableSet(GV_PREFIX + "LOCK_BEARISH", (double)lock_bearish);
+  }
+
+void DeleteGlobalVariables()
+  {
+   GlobalVariableDel(GV_PREFIX + "STORED_HIGH");
+   GlobalVariableDel(GV_PREFIX + "CURRENT_HIGH");
+   GlobalVariableDel(GV_PREFIX + "CONTRACTION_HIGH");
+   GlobalVariableDel(GV_PREFIX + "LOCK_BULLISH");
+   GlobalVariableDel(GV_PREFIX + "STORED_LOW");
+   GlobalVariableDel(GV_PREFIX + "CURRENT_LOW");
+   GlobalVariableDel(GV_PREFIX + "CONTRACTION_LOW");
+   GlobalVariableDel(GV_PREFIX + "LOCK_BEARISH");
+  }
+
+void ResetExpansionEngine()
+  {
+   stored_high = 0;
+   current_high = 0;
+   stored_contraction_high = 0;
+   lock_bullish = false;
+
+   stored_low = 0;
+   current_low = 0;
+   stored_contraction_low = 0;
+   lock_bearish = false;
+   
+   SyncGlobalVariables();
+  }
+
+bool IsSameDay(datetime t1, datetime t2)
+  {
+   if(t1 == 0 || t2 == 0) return false;
+   MqlDateTime dt1, dt2;
+   TimeToStruct(t1, dt1);
+   TimeToStruct(t2, dt2);
+   return (dt1.day == dt2.day && dt1.mon == dt2.mon && dt1.year == dt2.year);
+  }
+
+bool CheckNewBrokerDay(datetime barTime)
+  {
+   if(last_broker_day == 0)
+     {
+      last_broker_day = barTime;
+      return false;
+     }
+   
+   MqlDateTime dt_current, dt_last;
+   TimeToStruct(barTime, dt_current);
+   TimeToStruct(last_broker_day, dt_last);
+
+   if(dt_current.day != dt_last.day || dt_current.mon != dt_last.mon || dt_current.year != dt_last.year)
+     {
+      ResetExpansionEngine();
+      last_broker_day = barTime;
+      return true;
+     }
+   return false;
+  }
+
+double GetPointDelta(double p1, double p2)
+  {
+   return MathRound(MathAbs(p2 - p1) / _Point);
+  }
+
+bool IsHighExpansion(double prev, double curr) { return curr > prev + _Point/10.0; }
+bool IsHighContraction(double prev, double curr) { return curr < prev - _Point/10.0; }
+bool IsLowExpansion(double prev, double curr) { return curr < prev - _Point/10.0; }
+bool IsLowContraction(double prev, double curr) { return curr > prev + _Point/10.0; }
+
+void TriggerBullishThreshold(datetime t)
+  {
+   if(lock_bullish) return;
+   
+   string name = "EXP_BULL_" + IntegerToString((long)t);
+   if(ObjectCreate(0, name, OBJ_VLINE, 0, t, 0))
+     {
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrLime);
+      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DOT);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+     }
+     
+   lock_bullish = true;
+   lock_bearish = false;
+   stored_high = 0;
+   stored_contraction_low = 0;
+   SyncGlobalVariables();
+  }
+
+void TriggerBearishThreshold(datetime t)
+  {
+   if(lock_bearish) return;
+
+   string name = "EXP_BEAR_" + IntegerToString((long)t);
+   if(ObjectCreate(0, name, OBJ_VLINE, 0, t, 0))
+     {
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrRed);
+      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DOT);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+     }
+
+   lock_bearish = true;
+   lock_bullish = false;
+   stored_low = 0;
+   stored_contraction_high = 0;
+   SyncGlobalVariables();
+  }
+
+void UpdateExpansionEngine(bool isHigh, bool isFinalizing, datetime triggerTime)
+  {
+   if(isHigh)
+     {
+      if(HighState[0].time == 0 || HighState[1].time == 0) return;
+      if(!IsSameDay(HighState[0].time, last_broker_day) || !IsSameDay(HighState[1].time, last_broker_day))
+        {
+         current_high = 0;
+         SyncGlobalVariables();
+         return;
+        }
+
+      if(isFinalizing)
+        {
+         if(IsHighExpansion(HighState[0].price, HighState[1].price))
+            stored_high += current_high;
+         else if(IsHighContraction(HighState[0].price, HighState[1].price))
+           {
+            stored_high = 0;
+            if(lock_bullish) stored_contraction_high += current_high;
+           }
+        }
+      else
+        {
+         current_high = GetPointDelta(HighState[0].price, HighState[1].price);
+         if(IsHighExpansion(HighState[0].price, HighState[1].price))
+           {
+            stored_contraction_high = 0;
+            if(!lock_bullish && (stored_high + current_high >= EXP_THRESHOLD))
+               TriggerBullishThreshold(triggerTime);
+           }
+         else if(IsHighContraction(HighState[0].price, HighState[1].price))
+           {
+            if(lock_bullish) stored_contraction_high = current_high;
+           }
+        }
+     }
+   else
+     {
+      if(LowState[0].time == 0 || LowState[1].time == 0) return;
+      if(!IsSameDay(LowState[0].time, last_broker_day) || !IsSameDay(LowState[1].time, last_broker_day))
+        {
+         current_low = 0;
+         SyncGlobalVariables();
+         return;
+        }
+
+      if(isFinalizing)
+        {
+         if(IsLowExpansion(LowState[0].price, LowState[1].price))
+            stored_low += current_low;
+         else if(IsLowContraction(LowState[0].price, LowState[1].price))
+           {
+            stored_low = 0;
+            if(lock_bearish) stored_contraction_low += current_low;
+           }
+        }
+      else
+        {
+         current_low = GetPointDelta(LowState[0].price, LowState[1].price);
+         if(IsLowExpansion(LowState[0].price, LowState[1].price))
+           {
+            stored_contraction_low = 0;
+            if(!lock_bearish && (stored_low + current_low >= EXP_THRESHOLD))
+               TriggerBearishThreshold(triggerTime);
+           }
+         else if(IsLowContraction(LowState[0].price, LowState[1].price))
+           {
+            if(lock_bearish) stored_contraction_low = current_low;
+           }
+        }
+     }
+   SyncGlobalVariables();
+  }
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+  
@@ -144,7 +360,7 @@ void OnInit()
    PlotIndexSetString(0,PLOT_LABEL,"Low1");
 //---- indicator symbol
    PlotIndexSetInteger(0,PLOT_ARROW,LowSymbol1);
-//---- indexing elements in the buffer as timeseries
+//---- indexing elements in the buffer (0 is newest)
    ArraySetAsSeries(LowBuffer1,true);
    ArraySetAsSeries(HighBuffer1,true);
    ArraySetAsSeries(LowBuffer2,true);
@@ -229,6 +445,7 @@ void OnInit()
    Handle3=iCustom(NULL,0,"Examples\\ZigZag",Period3,Deviation3,Backstep3);
    if(Handle3==INVALID_HANDLE) Print(" Failed to get handle of the ZigZag3 indicator");
 //----
+   SyncGlobalVariables();
   }
 //+------------------------------------------------------------------+
 //| Custom indicator deinitialization function                       |
@@ -237,6 +454,9 @@ void OnDeinit(const int reason)
   {
    DeleteObjectsByPrefix("MS_H_");
    DeleteObjectsByPrefix("MS_L_");
+   DeleteObjectsByPrefix("EXP_BULL_");
+   DeleteObjectsByPrefix("EXP_BEAR_");
+   DeleteGlobalVariables();
   }
 //+------------------------------------------------------------------+
 //| Deletes objects by prefix                                        |
@@ -277,8 +497,9 @@ void DrawStructureSegment(string prefix, SwingInfo &s1, SwingInfo &s2, bool isLa
 //+------------------------------------------------------------------+
 //| Helper to update market structure incrementally                  |
 //+------------------------------------------------------------------+
-void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buffer[], const datetime &times[], int lookback, int rates_total)
+void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buffer[], const datetime &times[], int lookback, int rates_total, bool isHistorical)
   {
+   bool isHigh = (prefix == "MS_H_");
 // Find latest pivot in buffer (within lookback or at least 100 bars)
    SwingInfo current;
    current.price = 0;
@@ -358,6 +579,11 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
       if(oldStillExists)
         {
          // Case 2: New pivot confirmed. Shift state.
+         
+         // --- EXPANSION ENGINE: FINALIZE PREVIOUS ---
+         UpdateExpansionEngine(isHigh, true, current.time);
+         // -------------------------------------------
+
          ObjectDelete(0, prefix + "LATEST");
          ObjectDelete(0, prefix + "TXT_LATEST");
          if(state[0].time != 0)
@@ -377,6 +603,7 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
             DrawStructureSegment(prefix, state[0], state[1], true);
         }
      }
+
    else if(current.time < state[1].time)
      {
       // Latest state pivot disappeared, current is now older
@@ -399,6 +626,10 @@ void UpdateMarketStructure(string prefix, SwingInfo &state[], const double &buff
             DrawStructureSegment(prefix, state[0], state[1], true);
         }
      }
+
+   // --- EXPANSION ENGINE: REALTIME UPDATE ---
+   UpdateExpansionEngine(isHigh, false, isHistorical ? state[1].time : TimeCurrent());
+   // -----------------------------------------
   }
 //+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
@@ -447,63 +678,101 @@ int OnCalculate(const int rates_total,    // number of bars in history at the cu
 //--- Market Structure Engine ---
    datetime times[];
    if(CopyTime(_Symbol, _Period, 0, rates_total, times) <= 0) return(rates_total);
+   // Buffers are Series (0=newest), so we make times Series too for consistency.
    ArraySetAsSeries(times, true);
 
    if(prev_calculated <= 0)
      {
       DeleteObjectsByPrefix("MS_H_");
       DeleteObjectsByPrefix("MS_L_");
+      DeleteObjectsByPrefix("EXP_BULL_");
+      DeleteObjectsByPrefix("EXP_BEAR_");
       ZeroMemory(HighState);
       ZeroMemory(LowState);
+      ResetExpansionEngine();
+      last_broker_day = 0;
 
-      int hCount = 0, lCount = 0;
-      SwingInfo tempHigh[], tempLow[];
-      ArrayResize(tempHigh, rates_total);
-      ArrayResize(tempLow, rates_total);
-
-      // 1. Scan historical pivots (chronologically oldest to newest)
+      // 1. Scan and process historical pivots sequentially (chronologically oldest to newest)
       for(int i = rates_total - 1; i >= 0; i--)
         {
-         if(HighBuffer2[i] > 0.0)
+         bool isH = (HighBuffer2[i] > 0.0);
+         bool isL = (LowBuffer2[i] > 0.0);
+         
+         if(isH || isL)
            {
-            tempHigh[hCount].time = times[i];
-            tempHigh[hCount].price = HighBuffer2[i];
-            tempHigh[hCount].barIndex = i;
-            hCount++;
-           }
-         if(LowBuffer2[i] > 0.0)
-           {
-            tempLow[lCount].time = times[i];
-            tempLow[lCount].price = LowBuffer2[i];
-            tempLow[lCount].barIndex = i;
-            lCount++;
+            CheckNewBrokerDay(times[i]);
+            
+            if(isH)
+              {
+               SwingInfo current;
+               current.time = times[i];
+               current.price = HighBuffer2[i];
+               current.barIndex = i;
+               
+               if(HighState[1].time != 0)
+                 {
+                  // Finalize previous
+                  UpdateExpansionEngine(true, true, current.time);
+                  
+                  DrawStructureSegment("MS_H_", HighState[0], HighState[1], false);
+                  HighState[0] = HighState[1];
+                  HighState[1] = current;
+                 }
+               else if(HighState[0].time != 0)
+                 {
+                  HighState[1] = current;
+                 }
+               else
+                 {
+                  HighState[0] = current;
+                 }
+               
+               // Mutable update (historical context)
+               UpdateExpansionEngine(true, false, HighState[1].time);
+              }
+
+            if(isL)
+              {
+               SwingInfo current;
+               current.time = times[i];
+               current.price = LowBuffer2[i];
+               current.barIndex = i;
+
+               if(LowState[1].time != 0)
+                 {
+                  // Finalize previous
+                  UpdateExpansionEngine(false, true, current.time);
+
+                  DrawStructureSegment("MS_L_", LowState[0], LowState[1], false);
+                  LowState[0] = LowState[1];
+                  LowState[1] = current;
+                 }
+               else if(LowState[0].time != 0)
+                 {
+                  LowState[1] = current;
+                 }
+               else
+                 {
+                  LowState[0] = current;
+                 }
+
+               // Mutable update (historical context)
+               UpdateExpansionEngine(false, false, LowState[1].time);
+              }
            }
         }
 
-      // 2. Draw all historical segments (except the very last one)
-      for(int i = 1; i < hCount - 1; i++)
-         DrawStructureSegment("MS_H_", tempHigh[i-1], tempHigh[i], false);
-      for(int i = 1; i < lCount - 1; i++)
-         DrawStructureSegment("MS_L_", tempLow[i-1], tempLow[i], false);
-
-      // 3. Store last two pivots and draw the latest mutable segment
-      if(hCount >= 2)
-        {
-         HighState[0] = tempHigh[hCount-2];
-         HighState[1] = tempHigh[hCount-1];
+      // Draw the latest mutable segments
+      if(HighState[0].time != 0 && HighState[1].time != 0)
          DrawStructureSegment("MS_H_", HighState[0], HighState[1], true);
-        }
-      if(lCount >= 2)
-        {
-         LowState[0] = tempLow[lCount-2];
-         LowState[1] = tempLow[lCount-1];
+      if(LowState[0].time != 0 && LowState[1].time != 0)
          DrawStructureSegment("MS_L_", LowState[0], LowState[1], true);
-        }
      }
    else
      {
-      UpdateMarketStructure("MS_H_", HighState, HighBuffer2, times, StartBar2, rates_total);
-      UpdateMarketStructure("MS_L_", LowState, LowBuffer2, times, StartBar2, rates_total);
+      CheckNewBrokerDay(times[0]);
+      UpdateMarketStructure("MS_H_", HighState, HighBuffer2, times, StartBar2, rates_total, false);
+      UpdateMarketStructure("MS_L_", LowState, LowBuffer2, times, StartBar2, rates_total, false);
      }
 
    return(rates_total);
