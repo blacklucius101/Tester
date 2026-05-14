@@ -228,7 +228,7 @@ remain internally deterministic.
 
 Historical replay divergence is acceptable.
 
-The current lock state, and the pairs (low, high) of `current`, `stored` and `stored_contraction` must be exposed as global variables for possible use by external indicators.
+The current lock state, and the pairs (low, high) of `current`, `stored` and `stored_contraction` must be exposed as global variables for possible use by external indicators. Use GlobalVariableSet(), not ordinary globals. Namespace aggressively. Delete owned globals on deinit. Rebuild globals on init. Treat them as realtime engine state, not historical storage.
 
 Dual directional accumulations coexist provided no locks are active.
 --- 
