@@ -1,83 +1,124 @@
-Refactor `Donchian Ultimate.mq5` MT5 indicator into a simplified implementation while preserving all existing visual band lines and zone fills and color scheme.
+Refactor the provided `Donchian Ultimate.mq5` MT5 indicator into a simplified, production-ready Donchian Channel core indicator while preserving its visual structure.
 
-Requirements:
+PRIMARY OBJECTIVE
+Create a lean indicator that retains all 5 plotted bands and visual fills, but removes all non-core logic and complexity.
 
-1. REMOVE the entire alert system
-* Remove all alert-related inputs
-* Remove all alert-related global variables
-* Remove all alert functions, including:
-  * HandleAlerts()
-  * IssueAlerts()
-  * HasMidLineBullishCrossing()
-  * HasMidLineBearishCrossing()
-  * HasCandleCloseInsideResistance()
-  * HasCandleCloseInsideSupport()
-  * ResetGlobalVariables()
-  * RefreshGlobalVariables()
-* Remove all SendMail, SendNotification, and Alert logic
-* Remove all alert message strings and state tracking
+REMOVE COMPLETELY
+1. Alert System (entirely remove)
 
-2. REMOVE all multi-timeframe (MTF) support
 * Remove:
-  * InpTimeframe input
-  * Timeframe variable
-  * deltaHighTF variable
-  * CopyClose() usage
-  * iBarShift() usage
-  * all timeframe conversion logic
-  * all PERIOD_CURRENT vs higher timeframe synchronization logic
-* The indicator should operate ONLY on the current chart timeframe
+    * All alert inputs
+    * All alert state variables
+    * All alert messages
+    * All alert functions:
+        * HandleAlerts()
+        * IssueAlerts()
+        * HasMidLineBullishCrossing()
+        * HasMidLineBearishCrossing()
+        * HasCandleCloseInsideResistance()
+        * HasCandleCloseInsideSupport()
+        * ResetGlobalVariables()
+        * RefreshGlobalVariables()
+* Remove:
+    * Alert()
+    * SendMail()
+    * SendNotification()
 
-3. REMOVE all alternative calculation modes
-* Delete ENUM_PRICE_TYPE entirely
-* Remove PriceType input
-* Remove all switch-case logic related to price calculation modes
-* Retain ONLY the classic Donchian calculation:
-  * Upper Line = highest HIGH over InpPeriod
-  * Lower Line = lowest LOW over InpPeriod
+2. Multi-Timeframe (MTF) Support (fully remove)
+Remove:
+* InpTimeframe
+* Timeframe
+* deltaHighTF
+* CopyClose()
+* iBarShift()
+* Any higher-timeframe mapping logic
 
-4. RETAIN all 5 visual band lines and their visualization style
-Keep:
-* Upper Line
-* Lower Line
-* Mid Line
-* Resistance
-* Support
-
-Keep:
-* existing colors
-* line styles
-* widths
-* fills/shaded zones
-* DRAW_FILLING visualization
-* support/resistance zone rendering
-
-5. SIMPLIFY the calculation logic
-Use only current timeframe data arrays:
+Indicator MUST operate only on:
 * high[]
 * low[]
 * open[]
 * close[]
+from the current chart timeframe.
 
-Simplify calculations to:
-* Upper = highest high over period
-* Lower = lowest low over period
+3. All alternative calculation modes (remove completely)
+Remove:
+* ENUM_PRICE_TYPE
+* PriceType
+* All switch-case logic for price variations
+
+KEEP (VISUAL SYSTEM MUST REMAIN)
+Retain all 5 bands and rendering exactly:
+* Upper Line (highest high)
+* Lower Line (lowest low)
+* Mid Line (average of upper/lower)
+* Resistance Line (lowest high)
+* Support Line (highest low)
+* Resistance Fill Zone
+* Support Fill Zone
+
+Also retain:
+* DRAW_LINE
+* DRAW_DOT styles
+* DRAW_FILLING
+* colors
+* buffer structure
+* plot configuration
+
+CORE CALCULATION RULE (STRICT)
+Use ONLY this logic:
+
+Window
+For each bar i: `start = i - InpPeriod + 1`
+
+Bounds
+* Upper Line = highest HIGH in window
+* Lower Line = lowest LOW in window
+
+Inner Structure (IMPORTANT — preserve exactly)
+* Resistance = highest LOW in window
+* Support = lowest HIGH in window
+
+Midline 
 * Mid = (Upper + Lower) / 2
 
-Resistance and Support bands should still be calculated and rendered exactly as before, but using only current timeframe data.
+IMPLEMENTATION REQUIREMENTS
+* Use ONLY ArrayMaximum() and ArrayMinimum() on:
+    * high[]
+    * low[]
+* No MTF functions
+* No iHighest/iLowest
+* No CopyClose
+* No shift/timeframe mapping
 
-6. CLEANUP
-* Remove unused variables
-* Remove dead code
-* Remove unnecessary comments
-* Preserve indicator behavior and appearance
-* Preserve buffer ordering and plot rendering
-* Keep the code compile-safe for MT5 strict mode
+PERFORMANCE RULE
+Ensure:
+* No unnecessary repeated scans where possible
+* No redundant recalculations outside loop
+* Safe indexing (start >= 0)
+* Skip calculation if i < InpPeriod - 1
 
-Goal:
-Create a lean, readable, maintainable Donchian indicator that preserves the full complete visual structure while removing:
-* alerts
-* MTF complexity
-* alternative price modes
+VISUAL REQUIREMENTS
+Preserve:
+* 5-band structure
+* Fill zones between:
+    * Resistance ↔ Upper
+    * Support ↔ Lower
+* Same colors and styles
+
+FINAL OUTPUT REQUIREMENT
+Produce:
+* Clean, compile-ready MQL5 code
+* Strict mode compatible
+* Minimal, readable structure
+* No unused variables or dead code
+
+GOAL SUMMARY
+A simplified Donchian indicator that:
+* behaves exactly like the original visually
+* but contains only core mathematical logic
+* no alerts
+* no MTF
+* no alternate price models
+* no feature bloat
 
 Ensure the resulting code compiles cleanly in the Metatrader 5 platform without tiggering any warnings or errors.
