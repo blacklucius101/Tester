@@ -1,124 +1,220 @@
-Refactor the provided `Donchian Ultimate.mq5` MT5 indicator into a simplified, production-ready Donchian Channel core indicator while preserving its visual structure.
+Refactor the attached MT5 indicator into a unified candle-by-candle replay engine using a single processing path for both historical and realtime execution.
 
-PRIMARY OBJECTIVE
-Create a lean indicator that retains all 5 plotted bands and visual fills, but removes all non-core logic and complexity.
+IMPORTANT ARCHITECTURAL GOALS
 
-REMOVE COMPLETELY
-1. Alert System (entirely remove)
+The current implementation has:
 
-* Remove:
-    * All alert inputs
-    * All alert state variables
-    * All alert messages
-    * All alert functions:
-        * HandleAlerts()
-        * IssueAlerts()
-        * HasMidLineBullishCrossing()
-        * HasMidLineBearishCrossing()
-        * HasCandleCloseInsideResistance()
-        * HasCandleCloseInsideSupport()
-        * ResetGlobalVariables()
-        * RefreshGlobalVariables()
-* Remove:
-    * Alert()
-    * SendMail()
-    * SendNotification()
+* separate historical reconstruction logic
+* separate realtime mutation/update logic
 
-2. Multi-Timeframe (MTF) Support (fully remove)
-Remove:
-* InpTimeframe
-* Timeframe
-* deltaHighTF
-* CopyClose()
-* iBarShift()
-* Any higher-timeframe mapping logic
+This must be replaced with:
 
-Indicator MUST operate only on:
-* high[]
-* low[]
-* open[]
-* close[]
-from the current chart timeframe.
+* one unified sequential processing engine
+* identical behavior for historical and realtime execution
+* candle-close processing only
+* use shift = 1 (previous candle) logic only, instead of shift = 0 (current candle)
+* no tick-level processing
+* no separate historical reconstruction branch
 
-3. All alternative calculation modes (remove completely)
-Remove:
-* ENUM_PRICE_TYPE
-* PriceType
-* All switch-case logic for price variations
+The resulting architecture should behave as a deterministic state machine.
 
-KEEP (VISUAL SYSTEM MUST REMAIN)
-Retain all 5 bands and rendering exactly:
-* Upper Line (highest high)
-* Lower Line (lowest low)
-* Mid Line (average of upper/lower)
-* Resistance Line (lowest high)
-* Support Line (highest low)
-* Resistance Fill Zone
-* Support Fill Zone
+CORE DESIGN PRINCIPLES
 
-Also retain:
-* DRAW_LINE
-* DRAW_DOT styles
-* DRAW_FILLING
-* colors
-* buffer structure
-* plot configuration
+1. PROCESS ONLY CLOSED CANDLES
 
-CORE CALCULATION RULE (STRICT)
-Use ONLY this logic:
+* The engine must execute only when a new bar forms.
+* All logic must use shift = 1.
+* No processing should occur on shift = 0.
+* Ignore intra-candle mutations entirely.
 
-Window
-For each bar i: `start = i - InpPeriod + 1`
+2. SINGLE PROCESSING FUNCTION
+   Create a unified function similar to:
 
-Bounds
-* Upper Line = highest HIGH in window
-* Lower Line = lowest LOW in window
+```cpp
+void ProcessBar(int shift,
+                const datetime &time[],
+                const double &high[],
+                const double &low[],
+                int rates_total)
+```
 
-Inner Structure (IMPORTANT — preserve exactly)
-* Resistance = highest LOW in window
-* Support = lowest HIGH in window
+This function must:
 
-Midline 
-* Mid = (Upper + Lower) / 2
+* read ZigZag buffers
+* detect pivot creation/replacement
+* update market structure
+* update expansion engine
+* manage locks
+* update visual objects
 
-IMPLEMENTATION REQUIREMENTS
-* Use ONLY ArrayMaximum() and ArrayMinimum() on:
-    * high[]
-    * low[]
-* No MTF functions
-* No iHighest/iLowest
-* No CopyClose
-* No shift/timeframe mapping
+The same function must be used for:
 
-PERFORMANCE RULE
-Ensure:
-* No unnecessary repeated scans where possible
-* No redundant recalculations outside loop
-* Safe indexing (start >= 0)
-* Skip calculation if i < InpPeriod - 1
+* historical replay
+* realtime updates
 
-VISUAL REQUIREMENTS
-Preserve:
-* 5-band structure
-* Fill zones between:
-    * Resistance ↔ Upper
-    * Support ↔ Lower
-* Same colors and styles
+3. HISTORICAL REPLAY
+   On first initialization:
 
-FINAL OUTPUT REQUIREMENT
-Produce:
-* Clean, compile-ready MQL5 code
-* Strict mode compatible
-* Minimal, readable structure
-* No unused variables or dead code
+* replay candles sequentially from oldest to newest
+* process one candle at a time
+* emulate live execution exactly
 
-GOAL SUMMARY
-A simplified Donchian indicator that:
-* behaves exactly like the original visually
-* but contains only core mathematical logic
-* no alerts
-* no MTF
-* no alternate price models
-* no feature bloat
+Example:
 
-Ensure the resulting code compiles cleanly in the Metatrader 5 platform without tiggering any warnings or errors.
+```cpp
+for(int i = rates_total - 2; i >= 1; i--)
+{
+    ProcessBar(i, ...);
+}
+```
+
+Do NOT:
+
+* scan only pivot bars
+* use separate historical pivot reconstruction
+* use separate mutable/finalized historical logic
+
+4. REALTIME EXECUTION
+   After initialization:
+
+* detect new closed candle
+* call the exact same ProcessBar() function
+
+Example:
+
+```cpp
+if(IsNewBar())
+{
+    ProcessBar(1, ...);
+}
+```
+
+5. KEEP EXISTING ZIGZAG HANDLES
+   Retain:
+
+* Handle1
+* Handle2
+* Handle3
+
+Continue using:
+
+* CopyBuffer()
+
+Do NOT rewrite ZigZag calculations manually.
+
+6. MARKET STRUCTURE PHILOSOPHY
+   The system intentionally accepts mutable ZigZag pivots.
+
+However:
+
+* pivots are only processed at candle close
+* finalized state transitions are authoritative
+* no rollback/reversal system is required
+
+This is acceptable because:
+
+* bullish high pivots only repaint upward
+* bearish low pivots only repaint downward
+* expansion logic is monotonic
+* locks are irreversible by same-direction expansion
+
+Therefore:
+
+* replay windows are NOT required
+* rollback systems are NOT required
+* processing once per closed candle is sufficient
+
+7. REMOVE SPLIT HISTORICAL/REALTIME LOGIC
+   Eliminate:
+
+* historical-only pivot replay branches
+* duplicate market structure update paths
+* separate mutable/finalized historical reconstruction code
+
+The engine should instead rely entirely on sequential candle replay.
+
+8. PIVOT HANDLING RULES
+   Retain support for:
+
+* pivot replacement
+* pivot movement
+* pivot disappearance
+* mutable latest pivot logic
+
+The current state-machine behavior using:
+
+* state[0]
+* state[1]
+
+should remain conceptually intact.
+
+9. EXPANSION ENGINE RULES
+   Retain:
+
+* bullish/bearish lock logic
+* threshold triggering
+* accumulation behavior
+* contraction tracking
+
+Expansion accumulation must still occur ONLY on finalized transitions.
+
+10. PERFORMANCE REQUIREMENTS
+    Avoid:
+
+* full-history recalculation every tick
+* excessive object recreation
+
+Historical replay should occur only:
+
+* on initialization
+* or full recalculation events
+
+Realtime execution should process only one new closed candle.
+
+11. OBJECT MANAGEMENT
+    Retain:
+
+* structure segment drawing
+* labels
+* expansion vertical lines
+
+However:
+
+* avoid unnecessary delete/recreate cycles where possible
+* update mutable latest objects efficiently
+
+12. IMPORTANT IMPLEMENTATION DETAIL
+    Buffers and timeseries must remain synchronized.
+
+If buffers are series arrays:
+
+* times[] must also be treated as series arrays.
+
+13. DESIRED RESULT
+    The final architecture should behave like:
+
+INITIALIZATION:
+
+```text
+Replay candles sequentially oldest → newest
+using ProcessBar()
+```
+
+LIVE:
+
+```text
+On each new closed candle:
+    ProcessBar(1)
+```
+
+with identical state behavior in both modes.
+
+The end result should be:
+
+* deterministic
+* replay-safe
+* candle-close driven
+* single-path architecture
+* cleaner than the current implementation
+* easier to extend with future candle-level features
+* compile cleanly in the Metatrader 5 platform without triggering errors or warnings
