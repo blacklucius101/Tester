@@ -73,7 +73,7 @@ Backstep:
   * Remove or relocate the previous semafor.
   * Plot the new semafor at the more extreme candle.
 
-5. Historical Processing
+4. Historical Processing
 
 * When loading historical data:
 
@@ -81,14 +81,14 @@ Backstep:
   * Evaluate semafor conditions candle-by-candle exactly as they would have formed in real time.
 * No future-looking calculations are allowed outside the defined repaint/backstep window.
 
-6. Real-Time Processing
+5. Real-Time Processing
 
 * After historical initialization completes:
 
   * Process only newly closed candles (ie. processing should occur on the first tick of a newly opened candle, which finalizes the previous candle as closed.).
   * Calculations and repaint decisions must occur on candle close, not tick-by-tick.
 
-7. Anchor Retention Logic
+6. Anchor Retention Logic
 
 The indicator is NOT intended to behave like a conventional ZigZag implementation that maintains a full historical pivot chain through indicator buffers.
 
