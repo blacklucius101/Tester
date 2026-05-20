@@ -101,7 +101,7 @@ Backstep:
 * Repainting must be limited strictly to the configured Backstep range.
 * Arrows must remain visually aligned with candle highs/lows.
 * The implementation should be optimized for low CPU usage during live updates.
-*  The implementation must compile cleanly without triggering warnings or errors.
+* The implementation must compile cleanly in the Metatrader 5 platform without triggering warnings or errors.
 
 ## Additional Notes
 
