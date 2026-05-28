@@ -192,12 +192,16 @@ Note that bearish contraction accumulation is only allowed when the bearish lock
 - Support
 - Lower line
 
-Upper and lower line form the outer borders. Everything else comprises the internal borders.
+Call the indicator once on initialisation and then reuse. Use a hard coded period of 17. The .ex5 file will be located at Indicators\Custom\Donchian_Bands.ex5.
 
-Resistance zone spans Upper line → Resistance.
-Support zone spans Lower line → Support.
+Upper and lower line form the outer borders. Resistance, Midline and Support form the internal borders.
 
-Midline may overlap with resistance/ support, in which case resistance/ support become the only valid borders. Resistance and support may not overlap. In that case, we technically have no valid internal borders.
+- Resistance zone spans: Upper line → Resistance.
+- Support zone spans: Lower line → Support.
+
+Midline may overlap with resistance or support, in which case resistance and support become the only valid borders and midline is treated as practically non-existent.
+
+Resistance and support may not overlap. If they do, we technically have no valid internal borders, since they cancel out and as a result both are treated as practically non-existent.
 
 Definition of terms:
 - If bullish lock is active:
@@ -205,18 +209,28 @@ Definition of terms:
 - If bearish lock is active:
     - agreeing border is support, disagreeing border is resistance.
 
-- A close is considered beyond agreeing/disagreeing border if the close is nearer to the outer border than it is to the midline.
-- A close is considered within agreeing/disagreeing border if the close is nearer to the midline than it is to the outer border.
+For a candle crossing a border (ie. open is on one side of the border and close is on the other side):
+- A close is considered "beyond agreeing/disagreeing border" if the close is nearer to the outer border than it is to the midline.
+- A close is considered "within agreeing/disagreeing border" if the close is nearer to the midline than it is to the outer border.
 
-When a lock is active, contractions cause BOS and MSS, if they occur in the support/resistance zones.
-When candles cross beyond an agreeing border, `total_contraction + current_temp` is evaluated.
-* `>=9500 is BOS`
-* `>=24000 is MSS`
+When a lock is active, contractions (LH/HL, as defined in Phase 3) cause BOS and MSS, if they occur beyond the corresponding agreeing border of that lock state. We'll refer to contraction semafors in the agreeing border zone as valid contractions hereafter.
 
-If this evaluates to true, the first candle that closes back within the agreeing border confirms BOS/MSS.
-When a BOS or MSS is triggered, draw a vertical solid magenta line. 
-If price crosses beyond a disagreeing border and closes back within the disagreeing border, MSS and BOS are reset.
-An MSS causes an expansion of 12000 points to trigger a lock state (ie. it halves the threshold value).
+When a valid contraction (as defined in the statement above) occurs, `total_contraction + current_temp` is evaluated, similar to how `total_expansion + current_temp` is checked for expansions.
+* BOS threshold is 9500
+* MSS threshold is 24000
+MSS overwrites/succeeds BOS.
+
+For bullish contraction, `total_contraction + current_temp` <= -9500 or -24000.
+For bearish contraction, `total_contraction + current_temp` >= 9500 or 24000.
+
+If this evaluates to true, the first candle that closes back within the agreeing border confirms BOS/MSS and triggers the drawing of a vertical solid magenta line. 
+
+If price crosses beyond the disagreeing border of that lock state and closes back within the disagreeing border of that lock state, any active MSS and BOS state is reset. Any active BOS and MSS state is also reset when the opposite lock is triggered.
+
+An MSS causes an expansion of 12000 points to trigger the opposite lock state (ie. it halves the threshold value).
+Example case:
+- if bullish lock is active, an active MSS causes a bearish expansion of -12000 to trigger a bearish lock, instead of the usual -24000 outlined in Phase 3.
+- if bearish lock is active, an active MSS causes a bullish expansion of 12000 to trigger a bullish lock, instead of the usual 24000 outlined in Phase 3.
 
 --------------------------------------------------------------
 
