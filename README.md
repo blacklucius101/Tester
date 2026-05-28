@@ -192,7 +192,7 @@ Note that bearish contraction accumulation is only allowed when the bearish lock
 - Support
 - Lower line
 
-Call the indicator once on initialisation and then reuse. Use a hard coded period of 17. The .ex5 file will be located at Indicators\Custom\Donchian_Bands.ex5.
+Call the indicator once and then reuse. Use a hard coded period of 17. The .ex5 file will be located at `Indicators\Custom\Donchian_Bands.ex5`.
 
 Upper and lower line form the outer borders. Resistance, Midline and Support form the internal borders.
 
