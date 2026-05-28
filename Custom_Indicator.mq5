@@ -46,7 +46,7 @@ const int L1_BACKSTEP = 2;
 const int L1_ARROW = 159;
 
 const int L2_PERIOD = 13;
-const int L2_BACKSTEP = 12;
+const int L2_BACKSTEP = 5;
 const int L2_ARROW = 108;
 
 //--- Anchor structure for state retention
@@ -64,6 +64,14 @@ struct LevelState {
    int           firstBarOfDay;
    int           highCounter;
    int           lowCounter;
+
+   // Phase 3 variables
+   double        totalExpansionBullish;
+   double        totalExpansionBearish;
+   double        totalContractionBullish;
+   double        totalContractionBearish;
+   bool          bullishLock;
+   bool          bearishLock;
 };
 
 LevelState stateL1;
@@ -110,6 +118,44 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
+//| Draw a vertical dotted lock line                                 |
+//+------------------------------------------------------------------+
+void DrawLockLine(int barIndex, datetime t, color clr, string prefix) {
+   string name = prefix + "_" + IntegerToString(barIndex);
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_VLINE, 0, t, 0);
+      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DOT);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Trigger Bullish Lock                                             |
+//+------------------------------------------------------------------+
+void TriggerBullishLock(LevelState &state, int barIdx, datetime t) {
+   state.bullishLock = true;
+   state.bearishLock = false;
+   state.totalExpansionBullish = 0;
+   state.totalContractionBullish = 0;
+   state.totalContractionBearish = 0;
+   DrawLockLine(barIdx, t, clrLime, "L2_Bullish_Lock");
+}
+
+//+------------------------------------------------------------------+
+//| Trigger Bearish Lock                                             |
+//+------------------------------------------------------------------+
+void TriggerBearishLock(LevelState &state, int barIdx, datetime t) {
+   state.bearishLock = true;
+   state.bullishLock = false;
+   state.totalExpansionBearish = 0;
+   state.totalContractionBearish = 0;
+   state.totalContractionBullish = 0;
+   DrawLockLine(barIdx, t, clrRed, "L2_Bearish_Lock");
+}
+
+//+------------------------------------------------------------------+
 //| Custom indicator deinitialization function                       |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
@@ -136,6 +182,13 @@ void ResetLevelState(LevelState &state) {
    state.firstBarOfDay = -1;
    state.highCounter = 0;
    state.lowCounter = 0;
+
+   state.totalExpansionBullish = 0;
+   state.totalExpansionBearish = 0;
+   state.totalContractionBullish = 0;
+   state.totalContractionBearish = 0;
+   state.bullishLock = false;
+   state.bearishLock = false;
 }
 
 //+------------------------------------------------------------------+
@@ -324,11 +377,31 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
             
             if(isLevel2 && state.highAnchors[0].isActive) {
                UpdateL2HighConnection(state.highAnchors[0], state.highAnchors[1]);
+               
+               // Phase 3: Evaluate lock on repaint
+               if(!state.bullishLock) {
+                  double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
+                  if(state.totalExpansionBullish + current_temp >= 24000) {
+                     TriggerBullishLock(state, idx, time[idx]);
+                  }
+               }
             }
          }
       }
       
       if(!repainted) {
+         if(isLevel2 && state.highAnchors[1].isActive && state.highAnchors[0].isActive) {
+            // Phase 3: Confirm previous move
+            double prev_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
+            if(!state.bullishLock) {
+               if(prev_temp > 0) state.totalExpansionBullish += prev_temp;
+               else state.totalExpansionBullish = 0;
+            } else {
+               if(prev_temp < 0) state.totalContractionBullish += prev_temp;
+               else state.totalContractionBullish = 0;
+            }
+         }
+
          // New anchor: push previous to secondary position and finalize current
          state.highAnchors[0] = state.highAnchors[1];
          state.highCounter++;
@@ -341,6 +414,14 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
          
          if(isLevel2 && state.highAnchors[0].isActive) {
             UpdateL2HighConnection(state.highAnchors[0], state.highAnchors[1]);
+            
+            // Phase 3: Evaluate lock on new anchor
+            if(!state.bullishLock) {
+               double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
+               if(state.totalExpansionBullish + current_temp >= 24000) {
+                  TriggerBullishLock(state, idx, time[idx]);
+               }
+            }
          }
       }
    }
@@ -371,11 +452,31 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
             
             if(isLevel2 && state.lowAnchors[0].isActive) {
                UpdateL2LowConnection(state.lowAnchors[0], state.lowAnchors[1]);
+               
+               // Phase 3: Evaluate lock on repaint
+               if(!state.bearishLock) {
+                  double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
+                  if(state.totalExpansionBearish + current_temp <= -24000) {
+                     TriggerBearishLock(state, idx, time[idx]);
+                  }
+               }
             }
          }
       }
       
       if(!repainted) {
+         if(isLevel2 && state.lowAnchors[1].isActive && state.lowAnchors[0].isActive) {
+            // Phase 3: Confirm previous move
+            double prev_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
+            if(!state.bearishLock) {
+               if(prev_temp < 0) state.totalExpansionBearish += prev_temp;
+               else state.totalExpansionBearish = 0;
+            } else {
+               if(prev_temp > 0) state.totalContractionBearish += prev_temp;
+               else state.totalContractionBearish = 0;
+            }
+         }
+
          // New anchor: push previous to secondary position and finalize current
          state.lowAnchors[0] = state.lowAnchors[1];
          state.lowCounter++;
@@ -388,6 +489,14 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
          
          if(isLevel2 && state.lowAnchors[0].isActive) {
             UpdateL2LowConnection(state.lowAnchors[0], state.lowAnchors[1]);
+            
+            // Phase 3: Evaluate lock on new anchor
+            if(!state.bearishLock) {
+               double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
+               if(state.totalExpansionBearish + current_temp <= -24000) {
+                  TriggerBearishLock(state, idx, time[idx]);
+               }
+            }
          }
       }
    }
