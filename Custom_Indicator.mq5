@@ -46,7 +46,7 @@ const int L1_BACKSTEP = 2;
 const int L1_ARROW = 159;
 
 const int L2_PERIOD = 13;
-const int L2_BACKSTEP = 5;
+const int L2_BACKSTEP = 12;
 const int L2_ARROW = 108;
 
 //--- Anchor structure for state retention
@@ -55,12 +55,15 @@ struct SemaforAnchor {
    double   price;
    datetime time;
    bool     isActive;
+   int      id;
 };
 
 struct LevelState {
    SemaforAnchor highAnchors[2]; // Two most recent HIGH anchors
    SemaforAnchor lowAnchors[2];  // Two most recent LOW anchors
    int           firstBarOfDay;
+   int           highCounter;
+   int           lowCounter;
 };
 
 LevelState stateL1;
@@ -107,6 +110,14 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
+//| Custom indicator deinitialization function                       |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   ObjectsDeleteAll(0, "L2_");
+}
+
+//+------------------------------------------------------------------+
 //| Reset the state for a specific level                             |
 //+------------------------------------------------------------------+
 void ResetLevelState(LevelState &state) {
@@ -115,12 +126,16 @@ void ResetLevelState(LevelState &state) {
       state.highAnchors[i].barIndex = -1;
       state.highAnchors[i].price = 0;
       state.highAnchors[i].time = 0;
+      state.highAnchors[i].id = 0;
       state.lowAnchors[i].isActive = false;
       state.lowAnchors[i].barIndex = -1;
       state.lowAnchors[i].price = 0;
       state.lowAnchors[i].time = 0;
+      state.lowAnchors[i].id = 0;
    }
    state.firstBarOfDay = -1;
+   state.highCounter = 0;
+   state.lowCounter = 0;
 }
 
 //+------------------------------------------------------------------+
@@ -165,6 +180,8 @@ int OnCalculate(const int rates_total,
       ArrayInitialize(BufferL2H, 0.0);
       ArrayInitialize(BufferL2L, 0.0);
       
+      ObjectsDeleteAll(0, "L2_");
+      
       ResetLevelState(stateL1);
       ResetLevelState(stateL2);
       
@@ -191,17 +208,93 @@ int OnCalculate(const int rates_total,
       if(time[i] < targetDayStart) continue;
       if(time[i] >= targetDayEnd) break;
 
-      ProcessLevel(i, L1_PERIOD, L1_BACKSTEP, stateL1.firstBarOfDay, high, low, time, stateL1, BufferL1H, BufferL1L);
-      ProcessLevel(i, L2_PERIOD, L2_BACKSTEP, stateL2.firstBarOfDay, high, low, time, stateL2, BufferL2H, BufferL2L);
+      ProcessLevel(i, L1_PERIOD, L1_BACKSTEP, stateL1.firstBarOfDay, high, low, time, stateL1, BufferL1H, BufferL1L, false);
+      ProcessLevel(i, L2_PERIOD, L2_BACKSTEP, stateL2.firstBarOfDay, high, low, time, stateL2, BufferL2H, BufferL2L, true);
    }
 
    return(rates_total);
 }
 
 //+------------------------------------------------------------------+
+//| Helper to update L2 Trend Line                                   |
+//+------------------------------------------------------------------+
+void UpdateL2Trend(string name, datetime t1, double p1, datetime t2, double p2, color clr) {
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_TREND, 0, t1, p1, t2, p2);
+      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
+      ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   } else {
+      ObjectSetInteger(0, name, OBJPROP_TIME, 0, t1);
+      ObjectSetDouble(0, name, OBJPROP_PRICE, 0, p1);
+      ObjectSetInteger(0, name, OBJPROP_TIME, 1, t2);
+      ObjectSetDouble(0, name, OBJPROP_PRICE, 1, p2);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Helper to update L2 Text Label                                   |
+//+------------------------------------------------------------------+
+void UpdateL2Text(string name, datetime t, double p, string text, color clr, bool isHigh) {
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_TEXT, 0, t, p);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, isHigh ? ANCHOR_BOTTOM : ANCHOR_TOP);
+      ObjectSetString(0, name, OBJPROP_TEXT, text);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   } else {
+      ObjectSetInteger(0, name, OBJPROP_TIME, 0, t);
+      ObjectSetDouble(0, name, OBJPROP_PRICE, 0, p);
+      ObjectSetString(0, name, OBJPROP_TEXT, text);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Update Level 2 High connection (line and label)                  |
+//+------------------------------------------------------------------+
+void UpdateL2HighConnection(const SemaforAnchor &a1, const SemaforAnchor &a2) {
+   string lineName = "L2_H_Line_" + IntegerToString(a2.id);
+   string labelName = "L2_H_Label_" + IntegerToString(a2.id);
+   
+   double diffPoints = (a2.price - a1.price) / _Point;
+   color clr = (a2.price > a1.price) ? clrLime : clrRed;
+   
+   UpdateL2Trend(lineName, a1.time, a1.price, a2.time, a2.price, clr);
+   
+   datetime t_mid = (datetime)(((long)a1.time + (long)a2.time) / 2);
+   double p_mid = (a1.price + a2.price) / 2;
+   
+   string text = (diffPoints >= 0 ? "+" : "") + DoubleToString(diffPoints, 0);
+   UpdateL2Text(labelName, t_mid, p_mid, text, clr, true);
+}
+
+//+------------------------------------------------------------------+
+//| Update Level 2 Low connection (line and label)                   |
+//+------------------------------------------------------------------+
+void UpdateL2LowConnection(const SemaforAnchor &a1, const SemaforAnchor &a2) {
+   string lineName = "L2_L_Line_" + IntegerToString(a2.id);
+   string labelName = "L2_L_Label_" + IntegerToString(a2.id);
+   
+   double diffPoints = (a2.price - a1.price) / _Point;
+   color clr = (a2.price > a1.price) ? clrLime : clrRed;
+   
+   UpdateL2Trend(lineName, a1.time, a1.price, a2.time, a2.price, clr);
+   
+   datetime t_mid = (datetime)(((long)a1.time + (long)a2.time) / 2);
+   double p_mid = (a1.price + a2.price) / 2;
+   
+   string text = (diffPoints >= 0 ? "+" : "") + DoubleToString(diffPoints, 0);
+   UpdateL2Text(labelName, t_mid, p_mid, text, clr, false);
+}
+
+//+------------------------------------------------------------------+
 //| Process semafors for a specific level and candle index           |
 //+------------------------------------------------------------------+
-void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &high[], const double &low[], const datetime &time[], LevelState &state, double &bufH[], double &bufL[]) {
+void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &high[], const double &low[], const datetime &time[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2) {
    // Check if enough candles exist since the start of the day to satisfy Period requirement
    if(idx - firstBar < period - 1) return;
 
@@ -228,17 +321,27 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
             state.highAnchors[1].time = time[idx];
             bufH[idx] = high[idx];
             repainted = true;
+            
+            if(isLevel2 && state.highAnchors[0].isActive) {
+               UpdateL2HighConnection(state.highAnchors[0], state.highAnchors[1]);
+            }
          }
       }
       
       if(!repainted) {
          // New anchor: push previous to secondary position and finalize current
          state.highAnchors[0] = state.highAnchors[1];
+         state.highCounter++;
          state.highAnchors[1].barIndex = idx;
          state.highAnchors[1].price = high[idx];
          state.highAnchors[1].time = time[idx];
          state.highAnchors[1].isActive = true;
+         state.highAnchors[1].id = state.highCounter;
          bufH[idx] = high[idx];
+         
+         if(isLevel2 && state.highAnchors[0].isActive) {
+            UpdateL2HighConnection(state.highAnchors[0], state.highAnchors[1]);
+         }
       }
    }
 
@@ -265,17 +368,27 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
             state.lowAnchors[1].time = time[idx];
             bufL[idx] = low[idx];
             repainted = true;
+            
+            if(isLevel2 && state.lowAnchors[0].isActive) {
+               UpdateL2LowConnection(state.lowAnchors[0], state.lowAnchors[1]);
+            }
          }
       }
       
       if(!repainted) {
          // New anchor: push previous to secondary position and finalize current
          state.lowAnchors[0] = state.lowAnchors[1];
+         state.lowCounter++;
          state.lowAnchors[1].barIndex = idx;
          state.lowAnchors[1].price = low[idx];
          state.lowAnchors[1].time = time[idx];
          state.lowAnchors[1].isActive = true;
+         state.lowAnchors[1].id = state.lowCounter;
          bufL[idx] = low[idx];
+         
+         if(isLevel2 && state.lowAnchors[0].isActive) {
+            UpdateL2LowConnection(state.lowAnchors[0], state.lowAnchors[1]);
+         }
       }
    }
 }
