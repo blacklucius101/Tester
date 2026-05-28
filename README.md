@@ -185,6 +185,8 @@ Note that bearish contraction accumulation is only allowed when the bearish lock
 --------------------------------------------------------------
 
 # PHASE 4
+Note that moving forward, we are incorporating closing price data in addition to high and low candle data.
+
 `Donchian_Bands.mq5` has the following lines:
 - Upper line
 - Resistance
@@ -194,16 +196,12 @@ Note that bearish contraction accumulation is only allowed when the bearish lock
 
 Call the indicator once and then reuse. Use a hard coded period of 17. The .ex5 file will be located at `Indicators\Custom\Donchian_Bands.ex5`.
 
+## Definition of terms:
 Upper and lower line form the outer borders. Resistance, Midline and Support form the internal borders.
 
 - Resistance zone spans: Upper line → Resistance.
 - Support zone spans: Lower line → Support.
 
-Midline may overlap with resistance or support, in which case resistance and support become the only valid borders and midline is treated as practically non-existent.
-
-Resistance and support may not overlap. If they do, we technically have no valid internal borders, since they cancel out and as a result both are treated as practically non-existent.
-
-Definition of terms:
 - If bullish lock is active:
     - agreeing border is resistance, disagreeing border is support.
 - If bearish lock is active:
@@ -213,19 +211,31 @@ For a candle crossing a border (ie. open is on one side of the border and close 
 - A close is considered "beyond agreeing/disagreeing border" if the close is nearer to the outer border than it is to the midline.
 - A close is considered "within agreeing/disagreeing border" if the close is nearer to the midline than it is to the outer border.
 
+Beyond and within are terms used to relate candle close position relative to the agreeing/disagreeing border. Distance to the outer borders or midline is irrelevant. In other terms we would say:
+- "beyond bullish agreeing border" means above bullish agreeing border and "within bullish agreeing border" means below bullish agreeing border
+- "beyond bullish disagreeing border" means below bullish disagreeing border and "within bullish disagreeing border" means above bullish disagreeing border
+
+Mirror logic for bearish agreeing/disagreeing border:
+- "beyond bearish agreeing border" means below bearish agreeing border and "within bearish agreeing border" means above bearish agreeing border
+- "beyond bearish disagreeing border" means above bearish disagreeing border and "within bearish disagreeing border" means below bearish disagreeing border 
+
+## Required behaviour:
 When a lock is active, contractions (LH/HL, as defined in Phase 3) cause BOS and MSS, if they occur beyond the corresponding agreeing border of that lock state. We'll refer to contraction semafors in the agreeing border zone as valid contractions hereafter.
 
 When a valid contraction (as defined in the statement above) occurs, `total_contraction + current_temp` is evaluated, similar to how `total_expansion + current_temp` is checked for expansions.
 * BOS threshold is 9500
 * MSS threshold is 24000
-MSS overwrites/succeeds BOS.
 
 For bullish contraction, `total_contraction + current_temp` <= -9500 or -24000.
 For bearish contraction, `total_contraction + current_temp` >= 9500 or 24000.
 
-If this evaluates to true, the first candle that closes back within the agreeing border confirms BOS/MSS and triggers the drawing of a vertical solid magenta line. 
+If this evaluates to true for a semafor candle, the first candle (which can be the semafor candle itself) that closes back within the agreeing border confirms BOS/MSS and triggers the drawing of a vertical solid magenta line.
 
-If price crosses beyond the disagreeing border of that lock state and closes back within the disagreeing border of that lock state, any active MSS and BOS state is reset. Any active BOS and MSS state is also reset when the opposite lock is triggered.
+If price crosses beyond the disagreeing border of that lock state and closes back within the disagreeing border of that lock state, any active MSS and BOS  state is reset.
+Any active BOS and MSS state is also reset when the opposite lock is triggered (ie. BOS/MSS do not persist between lock transitions).
+Example case:
+- if bullish lock is active, and a BOS/MSS state is triggered, the BOS/MSS will reset when bearish lock is triggered.
+- if bearish lock is active, and a BOS/MSS state is triggered, the BOS/MSS will reset when bullish lock is triggered.
 
 An MSS causes an expansion of 12000 points to trigger the opposite lock state (ie. it halves the threshold value).
 Example case:
