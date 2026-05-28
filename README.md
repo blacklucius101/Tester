@@ -212,6 +212,7 @@ When a lock is active, contractions cause BOS and MSS, if they occur in the supp
 When candles cross beyond an agreeing border, `total_contraction + current_temp` is evaluated.
 * `>=9500 is BOS`
 * `>=24000 is MSS`
+
 If this evaluates to true, the first candle that closes back within the agreeing border confirms BOS/MSS.
 When a BOS or MSS is triggered, draw a vertical solid magenta line. 
 If price crosses beyond a disagreeing border and closes back within the disagreeing border, MSS and BOS are reset.
