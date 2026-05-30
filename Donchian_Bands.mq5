@@ -47,7 +47,7 @@
 #property indicator_color7 clrMaroon, clrMaroon
 #property indicator_width7 1
 
-input int InpPeriod = 20; // Period
+input int InpPeriod = 17; // Period
 
 double UpBuffer[];
 double DownBuffer[];
