@@ -1,4 +1,4 @@
-Modify `Donchian_Bands.mq5` to operate as a Daily Session Donchian indicator.
+Refactor `Donchian_Bands.mq5` to operate as a Daily Session Donchian indicator.
 
 Requirements:
 
