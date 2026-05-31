@@ -5,36 +5,91 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024"
 #property link      ""
-#property version   "1.10"
+#property version   "1.20"
 #property indicator_chart_window
-#property indicator_buffers 4
-#property indicator_plots   4
+#property indicator_buffers 13
+#property indicator_plots   11
+
+//--- plot Donchian Upper Line
+#property indicator_label1 "Upper Line"
+#property indicator_type1 DRAW_LINE
+#property indicator_color1 clrGreen
+#property indicator_width1 2
+
+//--- plot Donchian Lower Line
+#property indicator_label2 "Lower Line"
+#property indicator_type2 DRAW_LINE
+#property indicator_color2 clrRed
+#property indicator_width2 2
+
+//--- plot Donchian Mid Line
+#property indicator_label3 "Mid Line"
+#property indicator_type3 DRAW_LINE
+#property indicator_color3 clrBlue
+#property indicator_width3 1
+
+//--- plot Donchian Resistance
+#property indicator_label4 "Resistance"
+#property indicator_type4 DRAW_LINE
+#property indicator_style4 STYLE_DOT
+#property indicator_color4 clrPaleGreen
+#property indicator_width4 1
+
+//--- plot Donchian Support
+#property indicator_label5 "Support"
+#property indicator_type5 DRAW_LINE
+#property indicator_style5 STYLE_DOT
+#property indicator_color5 clrSalmon
+#property indicator_width5 1
+
+//--- plot Donchian Resistance Span
+#property indicator_label6 "Resistance Span"
+#property indicator_type6 DRAW_FILLING
+#property indicator_color6 clrDarkSlateGray, clrDarkSlateGray
+#property indicator_width6 1
+
+//--- plot Donchian Support Span
+#property indicator_label7 "Support Span"
+#property indicator_type7 DRAW_FILLING
+#property indicator_color7 clrMaroon, clrMaroon
+#property indicator_width7 1
 
 //--- plot Level 1 High
-#property indicator_label1  "Level 1 High"
-#property indicator_type1   DRAW_ARROW
-#property indicator_color1  clrAqua
-#property indicator_width1  1
+#property indicator_label8  "Level 1 High"
+#property indicator_type8   DRAW_ARROW
+#property indicator_color8  clrAqua
+#property indicator_width8  1
 //--- plot Level 1 Low
-#property indicator_label2  "Level 1 Low"
-#property indicator_type2   DRAW_ARROW
-#property indicator_color2  clrMagenta
-#property indicator_width2  1
+#property indicator_label9  "Level 1 Low"
+#property indicator_type9   DRAW_ARROW
+#property indicator_color9  clrMagenta
+#property indicator_width9  1
 //--- plot Level 2 High
-#property indicator_label3  "Level 2 High"
-#property indicator_type3   DRAW_ARROW
-#property indicator_color3  clrAqua
-#property indicator_width3  1
+#property indicator_label10 "Level 2 High"
+#property indicator_type10  DRAW_ARROW
+#property indicator_color10 clrAqua
+#property indicator_width10 1
 //--- plot Level 2 Low
-#property indicator_label4  "Level 2 Low"
-#property indicator_type4   DRAW_ARROW
-#property indicator_color4  clrMagenta
-#property indicator_width4  1
+#property indicator_label11 "Level 2 Low"
+#property indicator_type11  DRAW_ARROW
+#property indicator_color11 clrMagenta
+#property indicator_width11 1
 
 //--- input parameters
 input datetime InpHistoricalDate = 0; // Historical Date (YYYY.MM.DD) - 0 for Current Day
+input int      InpDonchianPeriod = 17; // Donchian Period
 
 //--- indicator buffers
+double         BufferUp[];
+double         BufferDown[];
+double         BufferMid[];
+double         BufferResistance[];
+double         BufferSupport[];
+double         BufferResFilling1[];
+double         BufferResFilling2[];
+double         BufferSupFilling1[];
+double         BufferSupFilling2[];
+
 double         BufferL1H[];
 double         BufferL1L[];
 double         BufferL2H[];
@@ -85,20 +140,36 @@ datetime targetDayEnd = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   //--- indicator buffers mapping
-   SetIndexBuffer(0, BufferL1H, INDICATOR_DATA);
-   SetIndexBuffer(1, BufferL1L, INDICATOR_DATA);
-   SetIndexBuffer(2, BufferL2H, INDICATOR_DATA);
-   SetIndexBuffer(3, BufferL2L, INDICATOR_DATA);
+   IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
 
-   //--- set arrow codes
-   PlotIndexSetInteger(0, PLOT_ARROW, L1_ARROW);
-   PlotIndexSetInteger(1, PLOT_ARROW, L1_ARROW);
-   PlotIndexSetInteger(2, PLOT_ARROW, L2_ARROW);
-   PlotIndexSetInteger(3, PLOT_ARROW, L2_ARROW);
+   //--- indicator buffers mapping
+   SetIndexBuffer(0, BufferUp, INDICATOR_DATA);
+   SetIndexBuffer(1, BufferDown, INDICATOR_DATA);
+   SetIndexBuffer(2, BufferMid, INDICATOR_DATA);
+   SetIndexBuffer(3, BufferResistance, INDICATOR_DATA);
+   SetIndexBuffer(4, BufferSupport, INDICATOR_DATA);
+   SetIndexBuffer(5, BufferResFilling1, INDICATOR_DATA);
+   SetIndexBuffer(6, BufferResFilling2, INDICATOR_DATA);
+   SetIndexBuffer(7, BufferSupFilling1, INDICATOR_DATA);
+   SetIndexBuffer(8, BufferSupFilling2, INDICATOR_DATA);
+   SetIndexBuffer(9, BufferL1H, INDICATOR_DATA);
+   SetIndexBuffer(10, BufferL1L, INDICATOR_DATA);
+   SetIndexBuffer(11, BufferL2H, INDICATOR_DATA);
+   SetIndexBuffer(12, BufferL2L, INDICATOR_DATA);
+
+   //--- set arrow codes for Level 1 and Level 2
+   PlotIndexSetInteger(7, PLOT_ARROW, L1_ARROW);
+   PlotIndexSetInteger(8, PLOT_ARROW, L1_ARROW);
+   PlotIndexSetInteger(9, PLOT_ARROW, L2_ARROW);
+   PlotIndexSetInteger(10, PLOT_ARROW, L2_ARROW);
 
    //--- set empty values
-   for(int i=0; i<4; i++) PlotIndexSetDouble(i, PLOT_EMPTY_VALUE, 0.0);
+   for(int i=0; i<7; i++) {
+      PlotIndexSetDouble(i, PLOT_EMPTY_VALUE, EMPTY_VALUE);
+   }
+   for(int i=7; i<11; i++) {
+      PlotIndexSetDouble(i, PLOT_EMPTY_VALUE, 0.0);
+   }
 
    //--- name for DataWindow
    IndicatorSetString(INDICATOR_SHORTNAME, "Semafor Indicator (BTCUSD M1 Optimized)");
@@ -205,7 +276,18 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   if(rates_total < MathMax(L1_PERIOD, L2_PERIOD)) return 0;
+   if(rates_total < MathMax(MathMax(L1_PERIOD, L2_PERIOD), InpDonchianPeriod)) return 0;
+
+   // Always ensure the currently forming candle is empty for Donchian (closed candles only)
+   BufferUp[rates_total - 1] = EMPTY_VALUE;
+   BufferDown[rates_total - 1] = EMPTY_VALUE;
+   BufferMid[rates_total - 1] = EMPTY_VALUE;
+   BufferResistance[rates_total - 1] = EMPTY_VALUE;
+   BufferSupport[rates_total - 1] = EMPTY_VALUE;
+   BufferResFilling1[rates_total - 1] = EMPTY_VALUE;
+   BufferResFilling2[rates_total - 1] = EMPTY_VALUE;
+   BufferSupFilling1[rates_total - 1] = EMPTY_VALUE;
+   BufferSupFilling2[rates_total - 1] = EMPTY_VALUE;
 
    // Determine target day boundaries
    datetime lastBarTime = time[rates_total - 1];
@@ -228,6 +310,15 @@ int OnCalculate(const int rates_total,
    if(fullReset || prev_calculated == 0) {
       start_idx = 0;
       // Clear all buffers for the entire range
+      ArrayInitialize(BufferUp, EMPTY_VALUE);
+      ArrayInitialize(BufferDown, EMPTY_VALUE);
+      ArrayInitialize(BufferMid, EMPTY_VALUE);
+      ArrayInitialize(BufferResistance, EMPTY_VALUE);
+      ArrayInitialize(BufferSupport, EMPTY_VALUE);
+      ArrayInitialize(BufferResFilling1, EMPTY_VALUE);
+      ArrayInitialize(BufferResFilling2, EMPTY_VALUE);
+      ArrayInitialize(BufferSupFilling1, EMPTY_VALUE);
+      ArrayInitialize(BufferSupFilling2, EMPTY_VALUE);
       ArrayInitialize(BufferL1H, 0.0);
       ArrayInitialize(BufferL1L, 0.0);
       ArrayInitialize(BufferL2H, 0.0);
@@ -260,6 +351,28 @@ int OnCalculate(const int rates_total,
       // Ignore candles outside the target day
       if(time[i] < targetDayStart) continue;
       if(time[i] >= targetDayEnd) break;
+
+      // --- Donchian Bands Calculation ---
+      if(i >= InpDonchianPeriod - 1) {
+         int window_start = i - InpDonchianPeriod + 1;
+         int hh_idx = ArrayMaximum(high, window_start, InpDonchianPeriod);
+         int ll_idx = ArrayMinimum(low,  window_start, InpDonchianPeriod);
+         int hl_idx = ArrayMaximum(low,  window_start, InpDonchianPeriod);
+         int lh_idx = ArrayMinimum(high, window_start, InpDonchianPeriod);
+
+         if(hh_idx != -1 && ll_idx != -1 && hl_idx != -1 && lh_idx != -1) {
+            BufferUp[i]         = high[hh_idx];
+            BufferDown[i]       = low[ll_idx];
+            BufferResistance[i] = low[hl_idx];
+            BufferSupport[i]    = high[lh_idx];
+            BufferMid[i]        = (BufferUp[i] + BufferDown[i]) / 2.0;
+
+            BufferResFilling1[i] = BufferUp[i];
+            BufferResFilling2[i] = BufferResistance[i];
+            BufferSupFilling1[i] = BufferSupport[i];
+            BufferSupFilling2[i] = BufferDown[i];
+         }
+      }
 
       ProcessLevel(i, L1_PERIOD, L1_BACKSTEP, stateL1.firstBarOfDay, high, low, time, stateL1, BufferL1H, BufferL1L, false);
       ProcessLevel(i, L2_PERIOD, L2_BACKSTEP, stateL2.firstBarOfDay, high, low, time, stateL2, BufferL2H, BufferL2L, true);
