@@ -193,8 +193,6 @@ Donchian_Bands.mq5 has the following lines (visualisation must be retained in th
 - Support
 - Lower line
 
----
-
 # PHASE 5
 Once the borders are defined, proceed to define push events and candle-border interactions with active locks.
 
@@ -233,12 +231,12 @@ When no lock is active (e.g., at the start of the day) both outer borders are co
 
 Push comes in two forms:
 - Cross push:
-    - Bullish cross push: Occurs at the upper line. Bullish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. resistance counter-cross). There should be no intervening bullish candles between the bullish cross push candle and the resistance counter-cross candle. These disrupt the push. The resistance counter-cross candle must not span more than 50% of the distance from the bullish cross push candle open and the lowest low between the bullish cross push candle and the candle that precedes it. Preliminary bearish candles that occur before the actual resistance counter-cross candle are referred to as buffers.
-    - Bearish cross push: Occurs at the lower line. Bearish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. support counter-cross). There should be no intervening bearish candles between the bearish cross push candle and the support counter-cross candle. These disrupt the push. The support counter-cross candle must not span more than 50% of the distance from the bearish cross push candle open and the lowest low between the bearish cross push candle and the candle that precedes it. Preliminary bullish candles that occur before the actual support counter-cross candle are referred to as buffers.
+    - Bullish cross push: Occurs at the upper line. Bullish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. resistance counter-cross). There should be no intervening bullish candles between the bullish cross push candle and the resistance counter-cross candle. These disrupt the push. The resistance counter-cross candle low must not span into more than 50% of the distance from the bullish cross push candle open and the lowest low between the bullish cross push candle and the candle that precedes it. Preliminary bearish float candles that occur before the actual resistance counter-cross candle are referred to as buffers.
+    - Bearish cross push: Occurs at the lower line. Bearish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. support counter-cross). There should be no intervening bearish candles between the bearish cross push candle and the support counter-cross candle. These disrupt the push. The support counter-cross candle high must not span into more than 50% of the distance from the bearish cross push candle open and the highest high between the bearish cross push candle and the candle that precedes it. Preliminary bullish float candles that occur before the actual support counter-cross candle are referred to as buffers.
 
 - Counter-cross push:
-    - Bullish counter-cross push: Occurs at the upper line. Bearish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. resistance counter-cross). The push candle itself may also be the resistance counter-cross candle. There should be no intervening bullish candles between the counter-cross push candle and the resistance counter-cross candle. These disrupt the push. The candle preceding the counter-cross push candle must touch the upper line. If the push candle itself fails to double as the resistance counter-cross candle, preliminary bearish candles (buffers) may occur before the actual resistance counter-cross candle.
-    - Bearish counter-cross push: Occurs at the lower line. Bullish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. support counter-cross). The push candle itself may also be the support counter-cross candle. There should be no intervening bearish candles between the counter-cross push candle and the support counter-cross candle. These disrupt the push. The candle preceding the counter-cross push candle must touch the lower line. If the push candle itself fails to double as the support counter-cross candle, preliminary bullish candles (buffers) may occur before the actual support counter-cross candle.
+    - Bullish counter-cross push: Occurs at the upper line. Bearish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. resistance counter-cross). The push candle itself may also be the resistance counter-cross candle. There should be no intervening bullish candles between the counter-cross push candle and the resistance counter-cross candle. These disrupt the push. The candle preceding the counter-cross push candle must touch the upper line. If the push candle itself fails to double as the resistance counter-cross candle, preliminary bearish float candles (buffers) may occur before the actual resistance counter-cross candle.
+    - Bearish counter-cross push: Occurs at the lower line. Bullish candle creates the new extreme. We then monitor for the first candle to cross back within the disagreeing internal border (ie. support counter-cross). The push candle itself may also be the support counter-cross candle. There should be no intervening bearish candles between the counter-cross push candle and the support counter-cross candle. These disrupt the push. The candle preceding the counter-cross push candle must touch the lower line. If the push candle itself fails to double as the support counter-cross candle, preliminary bullish float candles (buffers) may occur before the actual support counter-cross candle.
 
 The resistance and support counter-cross candles should be visually marked out for identification.
 
@@ -266,11 +264,11 @@ When a cross/swipe is disrupted, it stops being relevant.
 Additional notes on the (bullish) cross/swipe and (bullish) counter-cross interactions with the disagreeing internal border (support) and midline + agreeing internal border (resistance):
 - disagreeing internal border (support):  after the (bullish) cross/swipe, intervening bullish float candles (buffers) may occur before the actual (bullish) counter-cross.
 
-- midline + agreeing internal border (resistance): the candle preceding the (bullish) cross/swipe must have a higher high than the (bullish) cross. The (bullish) counter-cross candle's high price must not span past 50% of the distance between the (bullish) cross/swipe open and the highest high of the candle preceding the (bullish) cross/swipe.
+- midline + agreeing internal border (resistance): the candle preceding the (bullish) cross/swipe must have a higher high than the (bullish) cross. The (bullish) counter-cross candle's high price must not span into more than 50% of the distance between the (bullish) cross/swipe open and the highest high of the candle preceding the (bullish) cross/swipe.
 
 - Special (bullish) counter-cross push at midline: this occurs when a reverse (bullish) swipe occurs at midline, ie. a bullish candle touches the midline but opens and closes above it (`open > midline, close > midline, low <= midline`). The candle preceding this push candle must not touch the midline (low > midline).
 
-- (Bullish) balding: occurs when a (bullish) cross/swipe has `close == low`, and (bullish) counter-cross has `open == low`. The transition is essentially a flat bottom. The two candles must occur side by side. When (bullish) cross/swipe is bald, (bullish) counter-cross must also be bald. When (bullish) counter-cross is bald, (bullish) cross/swipe must also be bald. Otherwise the cross/swipe and counter-cross are invalid, since balding must occur as a cross/swipe + counter-cross pair. Failed balding invalidates that particular border level, and no other readings can be taken from that border until the level changes. Balding is only valid if it occurs in the resistance/support zones. Midline does not recognize balding. There's no balding for push candles.
+- (Bullish) balding: occurs when a (bullish) cross/swipe has `close == low`, and (bullish) counter-cross has `open == low`. The transition is essentially a flat bottom. The two candles must occur side by side. When (bullish) cross/swipe is bald, (bullish) counter-cross must also be bald. When (bullish) counter-cross is bald, (bullish) cross/swipe must also be bald. Otherwise it is a failed balding and the cross/swipe and counter-cross are invalid, since balding must occur as a cross/swipe + counter-cross pair. Failed balding invalidates that particular border level, and no other readings can be taken from that border until the level changes (eg. balding detected at support level $67890, makes that level stale until support shifts higher/lower) . Balding is only valid if it occurs within the resistance/support zones. Midline does not recognize balding. There's no balding for push candles.
 
 All valid counter-cross candles must be visually marked out for identification.
 
@@ -298,31 +296,33 @@ When a cross/swipe is disrupted, it stops being relevant.
 Additional notes on the (bearish) cross/swipe and (bearish) counter-cross interactions with the disagreeing internal border (resistance) and midline + agreeing internal border (support):
 - disagreeing internal border (resistance):  after the (bearish) cross/swipe, intervening bearish float candles (buffers) may occur before the actual (bearish) counter-cross.
 
-- midline + agreeing internal border (support): the candle preceding the (bearish) cross/swipe must have a lower low than the (bearish) cross. The (bearish) counter-cross must not span past 50% of the distance between the (bearish) cross/swipe open and the lowest low of the candle preceding the (bearish) cross/swipe.
+- midline + agreeing internal border (support): the candle preceding the (bearish) cross/swipe must have a lower low than the (bearish) cross. The (bearish) counter-cross must not span into more than 50% of the distance between the (bearish) cross/swipe open and the lowest low of the candle preceding the (bearish) cross/swipe.
 
 - Special (bearish) counter-cross push at midline: this occurs when a reverse (bearish) swipe occurs at midline, ie. a bearish candle touches the midline but opens and closes below it (`open < midline, close < midline, high >= midline`). The candle preceding this push candle must not touch the midline (high < midline).
 
-- (Bearish) balding: occurs when a (bearish) cross/swipe has `close == high`, and (bearish) counter-cross has `open == high`. The transition is essentially a flat top. The two candles must occur side by side. When (bearish) cross/swipe is bald, (bearish) counter-cross must also be bald. When (bearish) counter-cross is bald, (bearish) cross/swipe must also be bald. Otherwise the cross/swipe and counter-cross are invalid, since balding must occur as a cross/swipe + counter-cross pair. Failed balding invalidates that particular border level, and no other readings can be taken from that border until the level changes. Balding is only valid if it occurs in the resistance/support zones. Midline does not recognize balding. There's no balding for push candles.
+- (Bearish) balding: occurs when a (bearish) cross/swipe has `close == high`, and (bearish) counter-cross has `open == high`. The transition is essentially a flat top. The two candles must occur side by side. When (bearish) cross/swipe is bald, (bearish) counter-cross must also be bald. When (bearish) counter-cross is bald, (bearish) cross/swipe must also be bald. Otherwise it is a failed balding and the cross/swipe and counter-cross are invalid, since balding must occur as a cross/swipe + counter-cross pair. Failed balding invalidates that particular border level, and no other readings can be taken from that border until the level changes (eg. balding detected at support level $67890, makes that level stale until support shifts higher/lower). Balding is only valid if it occurs within the resistance/support zones. Midline does not recognize balding. There's no balding for push candles.
 
 All valid counter-cross candles must be visually marked out for identification.
+
+Every valid counter-cross event shall be plotted using a triangle arrow buffer. Bullish events use an upward-pointing triangle plotted beneath the candle. Bearish events use a downward-pointing triangle plotted above the candle.
 
 ---
 
 ## Border rules
-Midline may overlap with resistance or support, in which case resistance and support become the only valid borders and midline is treated as practically non-existent.
+Midline may overlap with resistance or support (ie. midline >= resistance, midline <= support), in which case resistance and support become the only valid borders and midline is treated as practically non-existent.
 
-Resistance and support may not overlap. If they do, we technically have no valid internal borders, since they cancel each other out and as a result both are treated as practically non-existent.
+Resistance and support may not overlap (resistance <= support). If they do, we technically have no valid internal borders, since they cancel each other out and as a result both are treated as practically non-existent.
 
 Treating a border as practically non-existent means the border is visible on the chart but invisible to the indicator's logic.
 
 * A counter-cross push candle must not close through more than 2 internal borders.
 * A cross push, cross, or counter-cross candle must not close through more than 1 internal border.
 
-A candle is considered to have closed through a border when its open is on one side of the border and its close is on the opposite side.
+A candle is considered to have closed through a border when its open is on one side of the border and its close is on the opposite side. Outer borders (ie. upper/lower line) cannot be closed through since they act as envelopes of price.
 
 Additionally, a cross push or cross candle must not both:
 
-1. close through a border, and
+1. close through an internal border, and
 2. touch the midline.
 
 A candle is considered to touch the midline only when:
@@ -331,6 +331,8 @@ A candle is considered to touch the midline only when:
 * the candle body remains entirely on one side of the midline.
 
 Counter-cross candles are immune to this midline touch.
+
+Equality (close/open == border) counts as a border crossing when evaluating maximum border crossings.
 
 ---
 
