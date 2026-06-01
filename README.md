@@ -365,6 +365,8 @@ With (*active lock type) BOS/MSS still active, if a candle closes beyond the dis
 Any active (*active lock type) BOS/MSS state is also reset when the opposite lock is triggered (ie. (*active lock type) BOS/MSS do not persist between lock transitions: bullish → bearish, bearish → bullish).
 An active (*active lock type) MSS causes an expansion of 12000 points to trigger the opposite lock state (ie. it halves the threshold value).
 
+Note that the BOS/MSS confirmation candle is affected by push rules and border rules only. Check the previous development phase for details.
+
 Example bullish case:
 Given the sequence HH1 → HH2 → LH1 → LH2, where HH2 triggers a bullish lock state. If LH2 occurs in the resistance zone, we evaluate BOS/MSS threshold. If `(bullish) total_contraction + current_temp` <= -9500 or -24000 at LH2, BOS/MSS is triggered.
 A triggered BOS/MSS threshold requires confirmation exactly once. A confirmed BOS/MSS here acts as a partial bearish lock influencing resistance zone and midline. The bullish lock maintains influence of the support zone. Thus we essentially have two disagreeing border zones, and no agreeing border zones.
@@ -386,7 +388,3 @@ A triggered BOS/MSS threshold requires confirmation exactly once. A confirmed BO
 A successful close back within support is what confirms BOS/MSS and a solid vertical magenta line is plotted at that counter-cross candle's bar index.
 If a new level 2 low is formed before BOS/MSS is confirmed, BOS/MSS threshold triggered state is reset.
 If a candle closes beyond resistance (ie. close > resistance), it has entered bearish lock administration. The first candle to close back within resistance (ie. close < resistance), resets BOS/MSS threshold triggered state. However if price continues higher, note that MSS halves the expansion threshold of 24000, therefore a higher high expansion `(bullish) total_expansion + current_temp` > 12000 will trigger a bullish lock. Bullish lock immediately resets BOS/MSS threshold triggered state.
-
-A successful close back within support is what confirms BOS/MSS and a solid vertical magenta line is plotted at that counter-cross candle's bar index.
-If a new level 2 low is formed before BOS/MSS is confirmed, BOS/MSS threshold triggered state is reset.
-If a candle closes beyond resistance (ie. close > resistance), it has entered bearish lock administration. The first candle to close back within resistance (ie. close < resistance), resets BOS/MSS threshold triggered state. However if price continues higher, note that MSS halves the expansion threshold of 24000, therefore a lower low expansion `(bearish) total_expansion + current_temp` > 12000 will trigger a bullish lock. Bullish lock immediately resets BOS/MSS threshold triggered state.
