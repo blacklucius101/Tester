@@ -341,11 +341,13 @@ After defining how candles interact with borders during active locks, define the
 
 ## Partial locks when BOS or MSS occurs:
 Required behaviour:
-When a lock is active, (*active lock type) contractions (LH/HL, as defined in Phase 3) cause (*active lock type) BOS and MSS, if they occur beyond the corresponding agreeing internal border of that lock state. We'll refer to (*active lock type) contraction semafors in the agreeing border zone as valid (*active lock type) contractions hereafter.
+When a lock is active, (*active lock type) contractions (LH/HL, as defined in Phase 3) cause (*active lock type) BOS/MSS, if they occur beyond the corresponding agreeing internal border of that lock state. We'll refer to (*active lock type) contraction semafors in the agreeing border zone as valid (*active lock type) contractions hereafter.
 
 When a valid (*active lock type) contraction occurs, `total_contraction + current_temp` is evaluated.
 * BOS threshold is 9500
 * MSS threshold is 24000
+
+MSS supersedes BOS.
 
 - For (bullish) contraction, `total_contraction + current_temp` <= -9500 or -24000.
 - For (bearish) contraction, `total_contraction + current_temp` >= 9500 or 24000.
@@ -354,8 +356,13 @@ Check Phase 3 for why (bullish) contraction uses negative values and (bearish) c
 
 If this evaluates to true for a semafor candle, the first candle (which can be the semafor candle itself) that closes back within the agreeing border confirms (*active lock type) BOS/MSS and triggers the drawing of a vertical solid magenta line.
 
-With (*active lock type) BOS/MSS still active, if a candle closes beyond the disagreeing border of that lock state and closes back within the disagreeing border of that lock state, any active (*active lock type) MSS and BOS  state is reset.
-Any active (*active lock type) BOS and MSS state is also reset when the opposite lock is triggered (ie. (*active lock type) BOS/MSS do not persist between lock transitions: bullish → bearish, bearish → bullish).
+This implies the following states:
+- NOT_TRIGGERED
+- TRIGGERED_WAITING_CONFIRMATION
+- CONFIRMED
+
+With (*active lock type) BOS/MSS still active, if a candle closes beyond the disagreeing border of that lock state and closes back within the disagreeing border of that lock state, any active (*active lock type) BOS/MSS state is reset to untriggered.
+Any active (*active lock type) BOS/MSS state is also reset when the opposite lock is triggered (ie. (*active lock type) BOS/MSS do not persist between lock transitions: bullish → bearish, bearish → bullish).
 An active (*active lock type) MSS causes an expansion of 12000 points to trigger the opposite lock state (ie. it halves the threshold value).
 
 Example bullish case:
@@ -375,6 +382,10 @@ Given the sequence LL1 → LL2 → HL1 → HL2, where LL2 triggers a bearish loc
 A triggered BOS/MSS threshold requires confirmation exactly once. A confirmed BOS/MSS here acts as a partial bullish lock influencing support zone and midline. The bearish lock maintains influence of the resistance zone. Thus we essentially have two disagreeing border zones, and no agreeing border zones.
 - If semafor candle HL2 was a bearish push candle (ie. it created a new lower low lower line), the counter-cross candle (which might be the push candle itself) must follow the bearish push rules outlined in Phase 5.
 - If semafor candle HL2 was not a bearish push candle, then the counter-cross candle is simply the first candle to close back within the support (close > support).
+
+A successful close back within support is what confirms BOS/MSS and a solid vertical magenta line is plotted at that counter-cross candle's bar index.
+If a new level 2 low is formed before BOS/MSS is confirmed, BOS/MSS threshold triggered state is reset.
+If a candle closes beyond resistance (ie. close > resistance), it has entered bearish lock administration. The first candle to close back within resistance (ie. close < resistance), resets BOS/MSS threshold triggered state. However if price continues higher, note that MSS halves the expansion threshold of 24000, therefore a higher high expansion `(bullish) total_expansion + current_temp` > 12000 will trigger a bullish lock. Bullish lock immediately resets BOS/MSS threshold triggered state.
 
 A successful close back within support is what confirms BOS/MSS and a solid vertical magenta line is plotted at that counter-cross candle's bar index.
 If a new level 2 low is formed before BOS/MSS is confirmed, BOS/MSS threshold triggered state is reset.
