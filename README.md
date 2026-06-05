@@ -5,6 +5,10 @@ Develop an MT5 custom indicator implementing the specifications detailed below.
 
 The indicator only works on a per day basis with intraday timeframes. (we're targeting BTCUSD M1 exclusively). Reset the indicator at the start of each day. Process only visible bars for selected day.
 
+Note that:
+* " → " denotes flow, eg. A → B means from A to B
+* " - " denotes subtraction, eg. A - B means A minus B
+
 Default behavior:
 * Process the current trading day only.
 
@@ -27,7 +31,7 @@ LEVEL 1
 
 LEVEL 2
 * Period: 13
-* Backstep: 5
+* Backstep: 6
 * Draw Type: DRAW_ARROW
 * Arrow Code: 108
 * Width: 1
@@ -46,8 +50,8 @@ Backstep = 2 (ie. 2 previous candles inclusive)
 Period = 2 (ie. 2 previous candles inclusive)
 Newly closed candle = 10
 
-Repaint scope is candles 9 - 10.
-Period scope is also candles 9 - 10.
+Repaint scope is candles 9 → 10.
+Period scope is also candles 9 → 10.
 
 Backstep is evaluated from the current candle being processed. If backstep = 2 and our current candle being processed is 10, a semafor at 9 repaints to 10. This ensures only one same-direction semafor arrow can exist within backstep distance of the current candle being processed.
 
@@ -410,7 +414,7 @@ Counter-cross candles are immune to this midline touch.
 
 Equality (close/open == border) counts as a border crossing when evaluating maximum border crossings.
 
-A candle must not contact the outer borders unless it is a push candle.
+A candle must not contact the outer borders unless it is a push candle. Non-push candles contacting the outer borders are invalid candles.
 
 The special midline push candle must not close through any border.
 
