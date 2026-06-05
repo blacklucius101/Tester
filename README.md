@@ -24,10 +24,10 @@ Once the borders are defined, proceed to define candle-border interactions with 
   - (bearish) agreeing border zone: support zone
   - (bearish) disagreeing border zone: resistance zone
 
-- candle is considered as "crossing a border"/"closing through a border" when open is on one side of the border and close is on the opposite side
-- candle is considered as "touching a border" when only the wick contacts the border and the body is fully on one side
-- candle is considered a "float candle" if it doesn't touch any border at all
-- candle is considered a buffer if it touches the border but doesn't close through it
+candle is considered as "crossing a border"/"closing through a border" when open is on one side of the border and close is on the opposite side
+candle is considered as "touching a border" when only the wick contacts the border and the body is fully on one side
+candle is considered a "float candle" if it doesn't touch any border at all
+candle is considered a buffer if it touches the border but doesn't close through it
 
 "beyond" and "within" are terms used to relate candle close position relative to the agreeing/disagreeing internal border:
 - beyond resistance means candle close > resistance
