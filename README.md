@@ -2,11 +2,13 @@
 Once the borders are defined, proceed to define candle-border interactions with & without active locks.
 
 ## Definition of terms
-- Outer borders: Upper line, Lower line.
-- Internal borders: Resistance, Midline, Support.
+Outer borders: Upper line, Lower line.
 
-- Resistance zone spans: Upper line → Resistance.
-- Support zone spans: Lower line → Support.
+Internal borders: Resistance, Midline, Support.
+
+Resistance zone spans: Upper line → Resistance.
+
+Support zone spans: Lower line → Support.
 
 1. Bullish lock active:
   - (bullish) agreeing internal border: resistance
