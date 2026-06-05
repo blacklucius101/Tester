@@ -3,7 +3,6 @@ Once the borders are defined, proceed to define candle-border interactions with 
 
 ## Definition of terms
 Outer borders: Upper line, Lower line.
-
 Internal borders: Resistance, Midline, Support.
 
 Resistance zone spans: Upper line → Resistance.
