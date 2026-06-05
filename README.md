@@ -26,8 +26,8 @@ LEVEL 1
 * Draw Type: DRAW_ARROW
 * Arrow Code: 159
 * Width: 1
-* High Color: Aqua
-* Low Color: Magenta
+* High Color: Magenta
+* Low Color: Aqua
 
 LEVEL 2
 * Period: 13
@@ -35,8 +35,8 @@ LEVEL 2
 * Draw Type: DRAW_ARROW
 * Arrow Code: 108
 * Width: 1
-* High Color: Aqua
-* Low Color: Magenta
+* High Color: Magenta
+* Low Color: Aqua
 
 ## Definitions
 Period:
