@@ -5,10 +5,10 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024"
 #property link      ""
-#property version   "1.21"
+#property version   "1.20"
 #property indicator_chart_window
-#property indicator_buffers 15
-#property indicator_plots   13
+#property indicator_buffers 13
+#property indicator_plots   11
 
 //--- plot Donchian Upper Line
 #property indicator_label1 "Upper Line"
@@ -57,34 +57,23 @@
 //--- plot Level 1 High
 #property indicator_label8  "Level 1 High"
 #property indicator_type8   DRAW_ARROW
-#property indicator_color8  clrAqua
+#property indicator_color8  clrMagenta
 #property indicator_width8  1
 //--- plot Level 1 Low
 #property indicator_label9  "Level 1 Low"
 #property indicator_type9   DRAW_ARROW
-#property indicator_color9  clrMagenta
+#property indicator_color9  clrAqua
 #property indicator_width9  1
 //--- plot Level 2 High
 #property indicator_label10 "Level 2 High"
 #property indicator_type10  DRAW_ARROW
-#property indicator_color10 clrAqua
+#property indicator_color10 clrMagenta
 #property indicator_width10 1
 //--- plot Level 2 Low
 #property indicator_label11 "Level 2 Low"
 #property indicator_type11  DRAW_ARROW
-#property indicator_color11 clrMagenta
+#property indicator_color11 clrAqua
 #property indicator_width11 1
-
-//--- plot Bullish Events
-#property indicator_label12 "Bullish Events"
-#property indicator_type12  DRAW_ARROW
-#property indicator_color12 clrLime
-#property indicator_width12 2
-//--- plot Bearish Events
-#property indicator_label13 "Bearish Events"
-#property indicator_type13  DRAW_ARROW
-#property indicator_color13 clrRed
-#property indicator_width13 2
 
 //--- input parameters
 input datetime InpHistoricalDate = 0; // Historical Date (YYYY.MM.DD) - 0 for Current Day
@@ -105,8 +94,6 @@ double         BufferL1H[];
 double         BufferL1L[];
 double         BufferL2H[];
 double         BufferL2L[];
-double         BufferBullishEvents[];
-double         BufferBearishEvents[];
 
 //--- Level Settings (Hardcoded as per requirements)
 const int L1_PERIOD = 2;
@@ -126,37 +113,6 @@ struct SemaforAnchor {
    int      id;
 };
 
-enum EInteractionType {
-   INT_NONE,
-   INT_CROSS,
-   INT_SWIPE
-};
-
-enum EBOSMSSState {
-   BOS_MSS_NONE,
-   BOS_MSS_TRIGGERED_BOS,
-   BOS_MSS_TRIGGERED_MSS,
-   BOS_MSS_CONFIRMED_BOS,
-   BOS_MSS_CONFIRMED_MSS
-};
-
-struct BorderState {
-   EInteractionType activeType;
-   int              triggerBarIdx;
-   double           triggerOpen;
-   double           precedingExtreme;
-   bool             isStale;
-   double           staleLevel;
-};
-
-struct PushState {
-   bool             active;
-   bool             isCrossPush;
-   int              triggerBarIdx;
-   double           triggerOpen;
-   double           extremeBetween;
-};
-
 struct LevelState {
    SemaforAnchor highAnchors[2]; // Two most recent HIGH anchors
    SemaforAnchor lowAnchors[2];  // Two most recent LOW anchors
@@ -171,23 +127,6 @@ struct LevelState {
    double        totalContractionBearish;
    bool          bullishLock;
    bool          bearishLock;
-
-   // Phase 5 state
-   BorderState   upperState;
-   BorderState   resState;
-   BorderState   midState;
-   BorderState   supState;
-   BorderState   lowerState;
-   PushState     bullPushState;
-   PushState     bearPushState;
-
-   // Phase 6 variables
-   EBOSMSSState  bosMssState;
-   int           bosMssTriggerIdx;
-   bool          bosMssIsPush;
-   bool          bosMssIsCrossPush;
-   double        bosMssTriggerOpen;
-   double        bosMssExtremeBetween;
 };
 
 LevelState stateL1;
@@ -217,22 +156,18 @@ int OnInit()
    SetIndexBuffer(10, BufferL1L, INDICATOR_DATA);
    SetIndexBuffer(11, BufferL2H, INDICATOR_DATA);
    SetIndexBuffer(12, BufferL2L, INDICATOR_DATA);
-   SetIndexBuffer(13, BufferBullishEvents, INDICATOR_DATA);
-   SetIndexBuffer(14, BufferBearishEvents, INDICATOR_DATA);
 
    //--- set arrow codes for Level 1 and Level 2
    PlotIndexSetInteger(7, PLOT_ARROW, L1_ARROW);
    PlotIndexSetInteger(8, PLOT_ARROW, L1_ARROW);
    PlotIndexSetInteger(9, PLOT_ARROW, L2_ARROW);
    PlotIndexSetInteger(10, PLOT_ARROW, L2_ARROW);
-   PlotIndexSetInteger(11, PLOT_ARROW, 241); // Upward triangle
-   PlotIndexSetInteger(12, PLOT_ARROW, 242); // Downward triangle
 
    //--- set empty values
    for(int i=0; i<7; i++) {
       PlotIndexSetDouble(i, PLOT_EMPTY_VALUE, EMPTY_VALUE);
    }
-   for(int i=7; i<13; i++) {
+   for(int i=7; i<11; i++) {
       PlotIndexSetDouble(i, PLOT_EMPTY_VALUE, 0.0);
    }
 
@@ -267,17 +202,6 @@ void DrawLockLine(int barIndex, datetime t, color clr, string prefix) {
    }
 }
 
-void DrawBOSMSSLine(int barIndex, datetime t) {
-   string name = "L2_BOS_MSS_Line_" + IntegerToString(barIndex);
-   if(ObjectFind(0, name) < 0) {
-      ObjectCreate(0, name, OBJ_VLINE, 0, t, 0);
-      ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_SOLID);
-      ObjectSetInteger(0, name, OBJPROP_COLOR, clrMagenta);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
-      ObjectSetInteger(0, name, OBJPROP_BACK, true);
-   }
-}
-
 //+------------------------------------------------------------------+
 //| Trigger Bullish Lock                                             |
 //+------------------------------------------------------------------+
@@ -288,22 +212,6 @@ void TriggerBullishLock(LevelState &state, int barIdx, datetime t) {
    state.totalContractionBullish = 0;
    state.totalContractionBearish = 0;
    DrawLockLine(barIdx, t, clrLime, "L2_Bullish_Lock");
-   
-   // Reset Phase 5 interaction states on lock transition
-   ResetBorderState(state.upperState);
-   ResetBorderState(state.resState);
-   ResetBorderState(state.midState);
-   ResetBorderState(state.supState);
-   ResetBorderState(state.lowerState);
-   ResetPushState(state.bullPushState);
-   ResetPushState(state.bearPushState);
-
-   state.bosMssState = BOS_MSS_NONE;
-   state.bosMssTriggerIdx = -1;
-   state.bosMssIsPush = false;
-   state.bosMssIsCrossPush = false;
-   state.bosMssTriggerOpen = 0;
-   state.bosMssExtremeBetween = 0;
 }
 
 //+------------------------------------------------------------------+
@@ -316,22 +224,6 @@ void TriggerBearishLock(LevelState &state, int barIdx, datetime t) {
    state.totalContractionBearish = 0;
    state.totalContractionBullish = 0;
    DrawLockLine(barIdx, t, clrRed, "L2_Bearish_Lock");
-
-   // Reset Phase 5 interaction states on lock transition
-   ResetBorderState(state.upperState);
-   ResetBorderState(state.resState);
-   ResetBorderState(state.midState);
-   ResetBorderState(state.supState);
-   ResetBorderState(state.lowerState);
-   ResetPushState(state.bullPushState);
-   ResetPushState(state.bearPushState);
-
-   state.bosMssState = BOS_MSS_NONE;
-   state.bosMssTriggerIdx = -1;
-   state.bosMssIsPush = false;
-   state.bosMssIsCrossPush = false;
-   state.bosMssTriggerOpen = 0;
-   state.bosMssExtremeBetween = 0;
 }
 
 //+------------------------------------------------------------------+
@@ -345,23 +237,6 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 //| Reset the state for a specific level                             |
 //+------------------------------------------------------------------+
-void ResetBorderState(BorderState &bs) {
-   bs.activeType = INT_NONE;
-   bs.triggerBarIdx = -1;
-   bs.triggerOpen = 0;
-   bs.precedingExtreme = 0;
-   bs.isStale = false;
-   bs.staleLevel = 0;
-}
-
-void ResetPushState(PushState &ps) {
-   ps.active = false;
-   ps.isCrossPush = false;
-   ps.triggerBarIdx = -1;
-   ps.triggerOpen = 0;
-   ps.extremeBetween = 0;
-}
-
 void ResetLevelState(LevelState &state) {
    for(int i=0; i<2; i++) {
       state.highAnchors[i].isActive = false;
@@ -385,17 +260,6 @@ void ResetLevelState(LevelState &state) {
    state.totalContractionBearish = 0;
    state.bullishLock = false;
    state.bearishLock = false;
-
-   ResetBorderState(state.upperState);
-   ResetBorderState(state.resState);
-   ResetBorderState(state.midState);
-   ResetBorderState(state.supState);
-   ResetBorderState(state.lowerState);
-   ResetPushState(state.bullPushState);
-   ResetPushState(state.bearPushState);
-
-   state.bosMssState = BOS_MSS_NONE;
-   state.bosMssTriggerIdx = -1;
 }
 
 //+------------------------------------------------------------------+
@@ -512,603 +376,9 @@ int OnCalculate(const int rates_total,
 
       ProcessLevel(i, L1_PERIOD, L1_BACKSTEP, stateL1.firstBarOfDay, high, low, time, stateL1, BufferL1H, BufferL1L, false);
       ProcessLevel(i, L2_PERIOD, L2_BACKSTEP, stateL2.firstBarOfDay, high, low, time, stateL2, BufferL2H, BufferL2L, true);
-
-      // Phase 5 processing (mainly driven by Level 2 state locks)
-      ProcessPhase5(i, open, high, low, close, stateL2);
-      
-      // Phase 6 BOS/MSS confirmation and reset handling
-      HandleBOSMSS(i, open, high, low, close, time, stateL2);
    }
 
    return(rates_total);
-}
-
-//+------------------------------------------------------------------+
-//| Phase 5 Helpers                                                  |
-//+------------------------------------------------------------------+
-bool IsClosedThrough(double pOpen, double pClose, double border) {
-   if(border == EMPTY_VALUE) return false;
-   if(pOpen == border || pClose == border) return true;
-   if((pOpen > border && pClose < border) || (pOpen < border && pClose > border)) return true;
-   return false;
-}
-
-bool IsMidlineTouch(double pOpen, double pHigh, double pLow, double pClose, double mid) {
-   if(mid == EMPTY_VALUE) return false;
-   // Wick contacts midline, body remains entirely on one side
-   bool wickTouches = (pHigh >= mid && pLow <= mid);
-   bool bodyAbove = (pOpen > mid && pClose > mid);
-   bool bodyBelow = (pOpen < mid && pClose < mid);
-   return wickTouches && (bodyAbove || bodyBelow);
-}
-
-//+------------------------------------------------------------------+
-//| Process Phase 5 interactions                                     |
-//+------------------------------------------------------------------+
-void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state) {
-   if(idx < 1) return;
-   
-   double up = BufferUp[idx];
-   double down = BufferDown[idx];
-   double mid = BufferMid[idx];
-   double res = BufferResistance[idx];
-   double sup = BufferSupport[idx];
-   
-   if(up == EMPTY_VALUE || down == EMPTY_VALUE) return;
-
-   // Midline overlap rules
-   bool midExists = true;
-   if(mid >= res || mid <= sup) midExists = false;
-   
-   bool resSupExists = true;
-   if(res <= sup) resSupExists = false;
-
-   double curMid = midExists ? mid : EMPTY_VALUE;
-   double curRes = resSupExists ? res : EMPTY_VALUE;
-   double curSup = resSupExists ? sup : EMPTY_VALUE;
-
-   // Identifying agreeing/disagreeing borders
-   double agreeInt = EMPTY_VALUE;
-   double disagreeInt = EMPTY_VALUE;
-   double agreeOuter = EMPTY_VALUE;
-   double disagreeOuter = EMPTY_VALUE;
-
-   if(state.bullishLock) {
-      agreeInt = curRes;
-      disagreeInt = curSup;
-      agreeOuter = up;
-      disagreeOuter = down;
-   } else if(state.bearishLock) {
-      agreeInt = curSup;
-      disagreeInt = curRes;
-      agreeOuter = down;
-      disagreeOuter = up;
-   } else {
-      // No lock: both outer are disagreeing
-      // The logic for push will handle both.
-   }
-
-   // --- Push Event Logic ---
-   HandlePushEvents(idx, open, high, low, close, state, up, down, curMid, curRes, curSup);
-
-   // --- Candle-Border Interaction Logic ---
-   if(state.bullishLock) {
-      HandleBullishInteractions(idx, open, high, low, close, state, up, down, curMid, curRes, curSup);
-   } else if(state.bearishLock) {
-      HandleBearishInteractions(idx, open, high, low, close, state, up, down, curMid, curRes, curSup);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Push Event Logic                                                 |
-//+------------------------------------------------------------------+
-void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup) {
-   double prevUp = BufferUp[idx-1];
-   double prevDown = BufferDown[idx-1];
-   if(prevUp == EMPTY_VALUE || prevDown == EMPTY_VALUE) return;
-
-   // 1. Monitor for new extremes (Pushes)
-   // Bullish Push (at upper line)
-   bool bullPushAllowed = !state.bullishLock || (state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS);
-   if(bullPushAllowed) { // Only if no lock or bearish lock (upper is disagreeing), or BOS/MSS confirmed
-      bool newHigh = (up > prevUp);
-      if(newHigh) {
-         bool isBullishCandle = (close[idx] > open[idx]);
-         bool isBearishCandle = (close[idx] < open[idx]);
-         
-         int crossed = 0;
-         if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-         bool midTouch = IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], mid);
-
-         if(isBullishCandle) { // Cross push
-            if(crossed <= 1 && !(crossed > 0 && midTouch)) {
-               state.bullPushState.active = true;
-               state.bullPushState.isCrossPush = true;
-               state.bullPushState.triggerBarIdx = idx;
-               state.bullPushState.triggerOpen = open[idx];
-               state.bullPushState.extremeBetween = MathMin(low[idx], low[idx-1]);
-
-               if(state.bosMssTriggerIdx == idx && (state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS)) {
-                  state.bosMssIsPush = true;
-                  state.bosMssIsCrossPush = true;
-                  state.bosMssTriggerOpen = state.bullPushState.triggerOpen;
-                  state.bosMssExtremeBetween = state.bullPushState.extremeBetween;
-               }
-            } else {
-               state.bullPushState.active = false;
-            }
-         } else if(isBearishCandle) { // Counter-cross push
-            // Preceding candle must touch upper line
-            if(high[idx-1] >= prevUp && crossed <= 2) {
-               state.bullPushState.active = true;
-               state.bullPushState.isCrossPush = false;
-               state.bullPushState.triggerBarIdx = idx;
-               state.bullPushState.triggerOpen = open[idx];
-               state.bullPushState.extremeBetween = 0; // Not used for CC push
-
-               if(state.bosMssTriggerIdx == idx && (state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS)) {
-                  state.bosMssIsPush = true;
-                  state.bosMssIsCrossPush = false;
-                  state.bosMssTriggerOpen = state.bullPushState.triggerOpen;
-                  state.bosMssExtremeBetween = 0;
-               }
-            } else {
-               state.bullPushState.active = false; 
-            }
-         } else {
-            state.bullPushState.active = false;
-         }
-      }
-   } else {
-      state.bullPushState.active = false;
-   }
-
-   // Bearish Push (at lower line)
-   bool bearPushAllowed = !state.bearishLock || (state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS);
-   if(bearPushAllowed) { // Only if no lock or bullish lock (lower is disagreeing), or BOS/MSS confirmed
-      bool newLow = (down < prevDown);
-      if(newLow) {
-         bool isBearishCandle = (close[idx] < open[idx]);
-         bool isBullishCandle = (close[idx] > open[idx]);
-
-         int crossed = 0;
-         if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-         bool midTouch = IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], mid);
-
-         if(isBearishCandle) { // Cross push
-            if(crossed <= 1 && !(crossed > 0 && midTouch)) {
-               state.bearPushState.active = true;
-               state.bearPushState.isCrossPush = true;
-               state.bearPushState.triggerBarIdx = idx;
-               state.bearPushState.triggerOpen = open[idx];
-               state.bearPushState.extremeBetween = MathMax(high[idx], high[idx-1]);
-
-               if(state.bosMssTriggerIdx == idx && (state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS)) {
-                  state.bosMssIsPush = true;
-                  state.bosMssIsCrossPush = true;
-                  state.bosMssTriggerOpen = state.bearPushState.triggerOpen;
-                  state.bosMssExtremeBetween = state.bearPushState.extremeBetween;
-               }
-            } else {
-               state.bearPushState.active = false;
-            }
-         } else if(isBullishCandle) { // Counter-cross push
-            // Preceding candle must touch lower line
-            if(low[idx-1] <= prevDown && crossed <= 2) {
-               state.bearPushState.active = true;
-               state.bearPushState.isCrossPush = false;
-               state.bearPushState.triggerBarIdx = idx;
-               state.bearPushState.triggerOpen = open[idx];
-               state.bearPushState.extremeBetween = 0;
-
-               if(state.bosMssTriggerIdx == idx && (state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS)) {
-                  state.bosMssIsPush = true;
-                  state.bosMssIsCrossPush = false;
-                  state.bosMssTriggerOpen = state.bearPushState.triggerOpen;
-                  state.bosMssExtremeBetween = 0;
-               }
-            } else {
-               state.bearPushState.active = false;
-            }
-         } else {
-            state.bearPushState.active = false;
-         }
-      }
-   } else {
-      state.bearPushState.active = false;
-   }
-
-   // 2. Monitor for counter-cross of pushed extremes
-   // Bullish Push Counter-cross (at Resistance)
-   if(state.bullPushState.active && res != EMPTY_VALUE) {
-      // Disruption: intervening bullish candle (except for CC push itself if it's the trigger)
-      if(idx > state.bullPushState.triggerBarIdx && close[idx] > open[idx]) {
-         state.bullPushState.active = false;
-      } else {
-         // Check for counter-cross
-         if(close[idx] < res) {
-            bool valid = true;
-            if(state.bullPushState.isCrossPush) {
-               // 50% rule
-               double range = state.bullPushState.triggerOpen - state.bullPushState.extremeBetween;
-               if(low[idx] < state.bullPushState.extremeBetween + 0.5 * range) valid = false;
-            }
-            // Max internal border crossing rule: counter-cross push candle must not close through > 2 internal borders.
-            // Other counter-crosses (for cross push) must not close through > 1 internal border.
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-            
-            if(state.bullPushState.isCrossPush) {
-               if(crossed > 1) valid = false;
-            } else {
-               if(idx == state.bullPushState.triggerBarIdx) {
-                  if(crossed > 2) valid = false;
-               } else {
-                  if(crossed > 1) valid = false;
-               }
-            }
-
-            if(valid) {
-               BufferBearishEvents[idx] = high[idx];
-               state.bullPushState.active = false;
-            }
-         }
-      }
-   }
-
-   // Bearish Push Counter-cross (at Support)
-   if(state.bearPushState.active && sup != EMPTY_VALUE) {
-      // Disruption: intervening bearish candle
-      if(idx > state.bearPushState.triggerBarIdx && close[idx] < open[idx]) {
-         state.bearPushState.active = false;
-      } else {
-         // Check for counter-cross
-         if(close[idx] > sup) {
-            bool valid = true;
-            if(state.bearPushState.isCrossPush) {
-               // 50% rule
-               double range = state.bearPushState.extremeBetween - state.bearPushState.triggerOpen;
-               if(high[idx] > state.bearPushState.extremeBetween - 0.5 * range) valid = false;
-            }
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-
-            if(state.bearPushState.isCrossPush) {
-               if(crossed > 1) valid = false;
-            } else {
-               if(idx == state.bearPushState.triggerBarIdx) {
-                  if(crossed > 2) valid = false;
-               } else {
-                  if(crossed > 1) valid = false;
-               }
-            }
-
-            if(valid) {
-               BufferBullishEvents[idx] = low[idx];
-               state.bearPushState.active = false;
-            }
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Bullish Interaction Logic                                        |
-//+------------------------------------------------------------------+
-void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup) {
-   // If BOS/MSS is confirmed, resistance zone and midline become disagreeing
-   bool agree = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
-   // Borders: Upper, Resistance (agreeing), Midline, Support (disagreeing), Lower
-   ProcessInteraction(idx, open, high, low, close, state.upperState, up, true, agree, state, true);
-   ProcessInteraction(idx, open, high, low, close, state.resState, res, true, agree, state, true);
-   ProcessInteraction(idx, open, high, low, close, state.midState, mid, true, agree, state, true);
-   ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true);
-   ProcessInteraction(idx, open, high, low, close, state.lowerState, down, true, false, state, true);
-}
-
-//+------------------------------------------------------------------+
-//| Bearish Interaction Logic                                        |
-//+------------------------------------------------------------------+
-void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup) {
-   // If BOS/MSS is confirmed, support zone and midline become disagreeing
-   bool agree = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
-   // Borders: Upper, Resistance (disagreeing), Midline, Support (agreeing), Lower
-   ProcessInteraction(idx, open, high, low, close, state.upperState, up, false, false, state, false);
-   ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false);
-   ProcessInteraction(idx, open, high, low, close, state.midState, mid, false, agree, state, false);
-   ProcessInteraction(idx, open, high, low, close, state.supState, sup, false, agree, state, false);
-   ProcessInteraction(idx, open, high, low, close, state.lowerState, down, false, agree, state, false);
-}
-
-//+------------------------------------------------------------------+
-//| Phase 6 BOS/MSS Logic                                            |
-//+------------------------------------------------------------------+
-void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state) {
-   if(!state.bullishLock && !state.bearishLock) return;
-
-   double res = BufferResistance[idx];
-   double sup = BufferSupport[idx];
-   double mid = BufferMid[idx];
-
-   // 1. Handle Confirmation
-   if(state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS) {
-      bool confirmAttempt = false;
-      bool confirmed = false;
-      
-      if(state.bullishLock) {
-         // Agreeing internal border is Resistance. Confirm on close back within (close < resistance).
-         if(res != EMPTY_VALUE && close[idx] < res) {
-            confirmAttempt = true;
-            
-            // Apply Phase 5 rules
-            bool valid = true;
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-            
-            // Confirmation candle is affected by push rules and border rules only.
-            // If the trigger semafor was a push candle, use push rules.
-            if(state.bosMssIsPush) {
-               if(state.bosMssIsCrossPush) {
-                  if(crossed > 1) valid = false;
-                  double range = state.bosMssTriggerOpen - state.bosMssExtremeBetween;
-                  if(low[idx] < state.bosMssExtremeBetween + 0.5 * range) valid = false;
-               } else {
-                  if(idx == state.bosMssTriggerIdx) {
-                     if(crossed > 2) valid = false;
-                  } else {
-                     if(crossed > 1) valid = false;
-                  }
-               }
-            } else {
-               // Normal border rules: max 1 internal border.
-               if(crossed > 1) valid = false;
-            }
-            
-            // Midline touch rule applies to confirmation candle as per user confirmation
-            if(IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], mid) && crossed > 0) valid = false;
-            
-            if(valid) confirmed = true;
-         }
-      } else {
-         // Bearish Lock: Agreeing internal border is Support. Confirm on close back within (close > support).
-         if(sup != EMPTY_VALUE && close[idx] > sup) {
-            confirmAttempt = true;
-            
-            bool valid = true;
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-            
-            if(state.bosMssIsPush) {
-               if(state.bosMssIsCrossPush) {
-                  if(crossed > 1) valid = false;
-                  double range = state.bosMssExtremeBetween - state.bosMssTriggerOpen;
-                  if(high[idx] > state.bosMssExtremeBetween - 0.5 * range) valid = false;
-               } else {
-                  if(idx == state.bosMssTriggerIdx) {
-                     if(crossed > 2) valid = false;
-                  } else {
-                     if(crossed > 1) valid = false;
-                  }
-               }
-            } else {
-               if(crossed > 1) valid = false;
-            }
-            
-            // Midline touch rule applies to confirmation candle as per user confirmation
-            if(IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], mid) && crossed > 0) valid = false;
-            
-            if(valid) confirmed = true;
-         }
-      }
-
-      if(confirmed) {
-         if(state.bosMssState == BOS_MSS_TRIGGERED_BOS) state.bosMssState = BOS_MSS_CONFIRMED_BOS;
-         else state.bosMssState = BOS_MSS_CONFIRMED_MSS;
-         DrawBOSMSSLine(idx, time[idx]);
-      } else if(confirmAttempt) {
-         // "If the first candle that closes back within the agreeing internal border ... failed to confirm ... then the triggered state resets."
-         state.bosMssState = BOS_MSS_NONE;
-      }
-   }
-   
-   // 2. Handle Resets for Confirmed state
-   if(state.bosMssState != BOS_MSS_NONE) {
-      if(state.bullishLock) {
-         // Reset when close beyond disagreeing border (support) and back within.
-         // We reuse the supState's interaction logic essentially.
-         // If a candle closes beyond support (close < support) and then one closes back within (close > support).
-         if(sup != EMPTY_VALUE && close[idx] > sup && close[idx-1] < sup) {
-            state.bosMssState = BOS_MSS_NONE;
-         }
-      } else {
-         // Bearish lock: disagreeing border is Resistance.
-         if(res != EMPTY_VALUE && close[idx] < res && close[idx-1] > res) {
-            state.bosMssState = BOS_MSS_NONE;
-         }
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Generic Interaction Processor                                    |
-//+------------------------------------------------------------------+
-void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer) {
-   if(border == EMPTY_VALUE) {
-      bs.activeType = INT_NONE;
-      return;
-   }
-   
-   // Check staleness (failed balding)
-   if(bs.isStale) {
-      if(border != bs.staleLevel) {
-         bs.isStale = false;
-      } else {
-         return; // Level still stale
-      }
-   }
-
-   bool isBearishCandle = (close[idx] < open[idx]);
-   bool isBullishCandle = (close[idx] > open[idx]);
-   
-   // Internal borders for crossing/touching rules
-   double r = BufferResistance[idx];
-   double m = BufferMid[idx];
-   double s = BufferSupport[idx];
-
-   // 1. Check for Counter-cross if active
-   if(bs.activeType != INT_NONE) {
-      bool counterCross = false;
-      bool failedCounterCross = false;
-      bool disrupted = false;
-
-      if(isBullishLock) {
-         // Bullish counter-cross: bullish candle closes above border
-         if(isBullishCandle && close[idx] >= border) counterCross = true;
-         // Failed: touches but fails to close above
-         else if(high[idx] >= border && close[idx] < border) failedCounterCross = true;
-         // Disruption
-         else if(!isBullishCandle && (low[idx] > border)) disrupted = true; // bullish float for bearish interactions? No, wait.
-         // "disrupted when: if a bearish float (ie. doesn't touch the border in question) candle occurs"
-         else if(isBearishCandle && low[idx] > border) disrupted = true;
-      } else {
-         // Bearish counter-cross: bearish candle closes below border
-         if(isBearishCandle && close[idx] <= border) counterCross = true;
-         // Failed: touches but fails to close below
-         else if(low[idx] <= border && close[idx] > border) failedCounterCross = true;
-         // Disruption
-         else if(isBullishCandle && high[idx] < border) disrupted = true; // bullish float
-      }
-
-      if(counterCross) {
-         // Validate rules: max crossing, midline touch, balding
-         bool valid = true;
-         
-         // Border crossing rules
-         int crossed = 0;
-         if(IsClosedThrough(open[idx], close[idx], r)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], m)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], s)) crossed++;
-         if(crossed > 1) valid = false; // counter-cross candle must not close through > 1 internal border.
-         
-         // Special rules for midline + agreeing internal border
-         if(isAgreeing) {
-            // Preceding must have more extreme extreme
-            if(isBullishLock) {
-               // the candle preceding the (bullish) cross/swipe must have a higher high than the (bullish) cross.
-               if(high[bs.triggerBarIdx-1] <= high[bs.triggerBarIdx]) valid = false;
-               // 50% rule: high must not reach more than 50% of (high[preceding] - open[trigger]) from open[trigger]
-               double dist = high[bs.triggerBarIdx-1] - bs.triggerOpen;
-               if(high[idx] > bs.triggerOpen + 0.5 * dist) valid = false;
-            } else {
-               // the candle preceding the (bearish) cross/swipe must have a lower low than the (bearish) cross.
-               if(low[bs.triggerBarIdx-1] >= low[bs.triggerBarIdx]) valid = false;
-               // 50% rule: low must not reach more than 50% of (open[trigger] - low[preceding]) from open[trigger]
-               double dist = bs.triggerOpen - low[bs.triggerBarIdx-1];
-               if(low[idx] < bs.triggerOpen - 0.5 * dist) valid = false;
-            }
-         }
-
-         // Balding
-         if(border != m && (border == r || border == s || border == BufferUp[idx] || border == BufferDown[idx])) {
-            bool crossBald = false;
-            bool ccBald = false;
-            if(isBullishLock) {
-               if(low[bs.triggerBarIdx] == close[bs.triggerBarIdx]) crossBald = true;
-               if(low[idx] == open[idx]) ccBald = true;
-            } else {
-               if(high[bs.triggerBarIdx] == close[bs.triggerBarIdx]) crossBald = true;
-               if(high[idx] == open[idx]) ccBald = true;
-            }
-            
-            if(crossBald || ccBald) {
-               if(crossBald && ccBald && (idx == bs.triggerBarIdx + 1)) {
-                  // Valid balding pair
-               } else {
-                  // Failed balding
-                  bs.isStale = true;
-                  bs.staleLevel = border;
-                  valid = false;
-               }
-            }
-         }
-
-         if(valid) {
-            if(toBullBuffer) BufferBullishEvents[idx] = low[idx];
-            else BufferBearishEvents[idx] = high[idx];
-         }
-         bs.activeType = INT_NONE;
-      } else if(disrupted || failedCounterCross) {
-         bs.activeType = INT_NONE;
-      }
-   }
-
-   // 2. Check for new Cross/Swipe
-   int crossed = 0;
-   if(IsClosedThrough(open[idx], close[idx], r)) crossed++;
-   if(IsClosedThrough(open[idx], close[idx], m)) crossed++;
-   if(IsClosedThrough(open[idx], close[idx], s)) crossed++;
-   bool midTouch = IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], m);
-   bool midConstraint = (crossed > 0 && midTouch);
-
-   if(isBullishLock) {
-      // (Bullish) Cross: bearish candle closes beneath border
-      if(isBearishCandle && open[idx] >= border && close[idx] < border) {
-         if(crossed <= 1 && !midConstraint) {
-            bs.activeType = INT_CROSS;
-            bs.triggerBarIdx = idx;
-            bs.triggerOpen = open[idx];
-            bs.precedingExtreme = high[idx-1];
-         } else bs.activeType = INT_NONE;
-      }
-      // (Bullish) Swipe: upper wick touches border
-      else if(isBearishCandle && open[idx] < border && high[idx] >= border) {
-         if(crossed <= 1 && !midConstraint) {
-            bs.activeType = INT_SWIPE;
-            bs.triggerBarIdx = idx;
-            bs.triggerOpen = open[idx];
-            bs.precedingExtreme = high[idx-1];
-         } else bs.activeType = INT_NONE;
-      }
-      // Special midline counter-cross push
-      else if(border == m && isBullishCandle && open[idx] > border && close[idx] > border && low[idx] <= border && low[idx-1] > border) {
-          BufferBullishEvents[idx] = low[idx];
-      }
-   } else {
-      // (Bearish) Cross: bullish candle closes above border
-      if(isBullishCandle && open[idx] <= border && close[idx] > border) {
-         if(crossed <= 1 && !midConstraint) {
-            bs.activeType = INT_CROSS;
-            bs.triggerBarIdx = idx;
-            bs.triggerOpen = open[idx];
-            bs.precedingExtreme = low[idx-1];
-         } else bs.activeType = INT_NONE;
-      }
-      // (Bearish) Swipe: lower wick touches border
-      else if(isBullishCandle && open[idx] > border && low[idx] <= border) {
-         if(crossed <= 1 && !midConstraint) {
-            bs.activeType = INT_SWIPE;
-            bs.triggerBarIdx = idx;
-            bs.triggerOpen = open[idx];
-            bs.precedingExtreme = low[idx-1];
-         } else bs.activeType = INT_NONE;
-      }
-      // Special midline counter-cross push
-      else if(border == m && isBearishCandle && open[idx] < border && close[idx] < border && high[idx] >= border && high[idx-1] < border) {
-          BufferBearishEvents[idx] = high[idx];
-      }
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -1224,24 +494,8 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                // Phase 3: Evaluate lock on repaint
                if(!state.bullishLock) {
                   double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
-                  double threshold = 24000;
-                  if(state.bearishLock && state.bosMssState == BOS_MSS_CONFIRMED_MSS) threshold = 12000;
-                  if(state.totalExpansionBullish + current_temp >= threshold) {
+                  if(state.totalExpansionBullish + current_temp >= 24000) {
                      TriggerBullishLock(state, idx, time[idx]);
-                  }
-               }
-               // Phase 6: Evaluate BOS/MSS on repaint
-               else if(state.bullishLock) {
-                  bool canTrigger = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
-                  if(canTrigger) {
-                     state.bosMssState = BOS_MSS_NONE;
-                     double res = BufferResistance[idx];
-                     if(res != EMPTY_VALUE && high[idx] > res) {
-                        double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
-                        double val = state.totalContractionBullish + current_temp;
-                        if(val <= -24000) { state.bosMssState = BOS_MSS_TRIGGERED_MSS; state.bosMssTriggerIdx = idx; }
-                        else if(val <= -9500) { state.bosMssState = BOS_MSS_TRIGGERED_BOS; state.bosMssTriggerIdx = idx; }
-                     }
                   }
                }
             }
@@ -1277,24 +531,8 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
             // Phase 3: Evaluate lock on new anchor
             if(!state.bullishLock) {
                double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
-               double threshold = 24000;
-               if(state.bearishLock && state.bosMssState == BOS_MSS_CONFIRMED_MSS) threshold = 12000;
-               if(state.totalExpansionBullish + current_temp >= threshold) {
+               if(state.totalExpansionBullish + current_temp >= 24000) {
                   TriggerBullishLock(state, idx, time[idx]);
-               }
-            }
-            // Phase 6: Evaluate BOS/MSS on new anchor
-            else if(state.bullishLock) {
-               bool canTrigger = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
-               if(canTrigger) {
-                  state.bosMssState = BOS_MSS_NONE;
-                  double res = BufferResistance[idx];
-                  if(res != EMPTY_VALUE && high[idx] > res) {
-                     double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
-                     double val = state.totalContractionBullish + current_temp;
-                     if(val <= -24000) { state.bosMssState = BOS_MSS_TRIGGERED_MSS; state.bosMssTriggerIdx = idx; }
-                     else if(val <= -9500) { state.bosMssState = BOS_MSS_TRIGGERED_BOS; state.bosMssTriggerIdx = idx; }
-                  }
                }
             }
          }
@@ -1331,24 +569,8 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                // Phase 3: Evaluate lock on repaint
                if(!state.bearishLock) {
                   double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
-                  double threshold = -24000;
-                  if(state.bullishLock && state.bosMssState == BOS_MSS_CONFIRMED_MSS) threshold = -12000;
-                  if(state.totalExpansionBearish + current_temp <= threshold) {
+                  if(state.totalExpansionBearish + current_temp <= -24000) {
                      TriggerBearishLock(state, idx, time[idx]);
-                  }
-               }
-               // Phase 6: Evaluate BOS/MSS on repaint
-               else if(state.bearishLock) {
-                  bool canTrigger = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
-                  if(canTrigger) {
-                     state.bosMssState = BOS_MSS_NONE;
-                     double sup = BufferSupport[idx];
-                     if(sup != EMPTY_VALUE && low[idx] < sup) {
-                        double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
-                        double val = state.totalContractionBearish + current_temp;
-                        if(val >= 24000) { state.bosMssState = BOS_MSS_TRIGGERED_MSS; state.bosMssTriggerIdx = idx; }
-                        else if(val >= 9500) { state.bosMssState = BOS_MSS_TRIGGERED_BOS; state.bosMssTriggerIdx = idx; }
-                     }
                   }
                }
             }
@@ -1384,24 +606,8 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
             // Phase 3: Evaluate lock on new anchor
             if(!state.bearishLock) {
                double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
-               double threshold = -24000;
-               if(state.bullishLock && state.bosMssState == BOS_MSS_CONFIRMED_MSS) threshold = -12000;
-               if(state.totalExpansionBearish + current_temp <= threshold) {
+               if(state.totalExpansionBearish + current_temp <= -24000) {
                   TriggerBearishLock(state, idx, time[idx]);
-               }
-            }
-            // Phase 6: Evaluate BOS/MSS on new anchor
-            else if(state.bearishLock) {
-               bool canTrigger = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
-               if(canTrigger) {
-                  state.bosMssState = BOS_MSS_NONE;
-                  double sup = BufferSupport[idx];
-                  if(sup != EMPTY_VALUE && low[idx] < sup) {
-                     double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
-                     double val = state.totalContractionBearish + current_temp;
-                     if(val >= 24000) { state.bosMssState = BOS_MSS_TRIGGERED_MSS; state.bosMssTriggerIdx = idx; }
-                     else if(val >= 9500) { state.bosMssState = BOS_MSS_TRIGGERED_BOS; state.bosMssTriggerIdx = idx; }
-                  }
                }
             }
          }
