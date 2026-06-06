@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                             Custom_Indicator.mq5 |
+//|                                       Final_Custom_Indicator.mq5 |
 //|                                  Copyright 2024, Software Agency |
 //|                                       Optimized for BTCUSD M1    |
 //+------------------------------------------------------------------+
