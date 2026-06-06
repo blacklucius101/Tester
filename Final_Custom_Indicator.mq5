@@ -57,22 +57,22 @@
 //--- plot Level 1 High
 #property indicator_label8  "Level 1 High"
 #property indicator_type8   DRAW_ARROW
-#property indicator_color8  clrAqua
+#property indicator_color8  clrMagenta
 #property indicator_width8  1
 //--- plot Level 1 Low
 #property indicator_label9  "Level 1 Low"
 #property indicator_type9   DRAW_ARROW
-#property indicator_color9  clrMagenta
+#property indicator_color9  clrAqua
 #property indicator_width9  1
 //--- plot Level 2 High
 #property indicator_label10 "Level 2 High"
 #property indicator_type10  DRAW_ARROW
-#property indicator_color10 clrAqua
+#property indicator_color10 clrMagenta
 #property indicator_width10 1
 //--- plot Level 2 Low
 #property indicator_label11 "Level 2 Low"
 #property indicator_type11  DRAW_ARROW
-#property indicator_color11 clrMagenta
+#property indicator_color11 clrAqua
 #property indicator_width11 1
 
 //--- plot Bullish Events
