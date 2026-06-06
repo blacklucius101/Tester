@@ -507,4 +507,6 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 
 Additionally, for some reason counter-cross candles are not being highlighted at all. This is contrary to the expected requirements.
 
-Conduct a review pass to ensure the corrected code satisfies expected requirements.
+Record the identified issues as comments alongside the corrected code.
+
+Conduct a review pass to ensure the corrected code satisfies expected requirements. Ensure the final code compiles in MetaTrader 5 without triggering errors or warnings.
