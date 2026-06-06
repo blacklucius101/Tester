@@ -175,7 +175,7 @@ Mirror logic for level 2 lows.
 
 Example bearish case:
 Given the sequence LL1 → LL2 → LL3
-Assuming LL1 is the first low of the day, total_expansion and total_contraction would be 0. When HH2 is formed, `current_temp = LL2 - LL1`. Threshold evaluation is `(bearish total_expansion + current_temp) <= -24000`:
+Assuming LL1 is the first low of the day, total_expansion and total_contraction would be 0. When LL2 is formed, `current_temp = LL2 - LL1`. Threshold evaluation is `(bearish total_expansion + current_temp) <= -24000`:
 - Assuming this evaluates to false, when LL3 is formed, current_temp is added to total_expansion before doing the new calculation `current_temp = LL3 - LL2` followed by a new threshold evaluation.
 - However, if it evaluated to true, plot the vertical line and trigger bearish lock. When LL3 is formed current_temp is only used for point difference display and segment colouring. No bearish accumulation or threshold evaluation.
 
@@ -495,3 +495,11 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
             - resistance zone only highlights counter-cross candles associated with the active bearish lock (ie. resistance counter-cross from bullish push, (bearish) counter-cross). Valid counter-cross candle at the resistance zone resets (bearish) BOS/MSS state to NOT_TRIGGERED.
         - CONFIRMED (bearish) MSS halves bullish expansion threshold. If at the time of confirmation (bullish) total_expansion >= 12000 points, then instead of a solid vertical magenta line, we trigger bullish lock and plot the associated lime dotted vertical line. Otherwise we have to wait for price to form a HH expansion that triggers the halved threshold, (bullish) total_expansion + current_temp >= 12000 points. Bullish lock immediately resets (bearish) BOS/MSS state to NOT_TRIGGERED, and (bearish) total_contraction to 0.
         - CONFIRMED (bearish) MSS is not affected by the formation of HL2/LL3, provided price didn't close within the resistance zone.
+
+---
+
+# Phase 7: Review and Testing
+
+## Preliminary Error Report
+`Prototype_Custom_Indicator.mq5` is the working indicator up to phase 4.
+`Final_Custom_Indicator.mq5` is the partially working indicator up to phase 6. Partially working because during testing, semafors stop evolving higher/lower with price once a red/lime vertical threshold line is triggered. The semafor remains anchored to its triggering candle even after that candle stops being the highest high/ lowest low of that particular period.
