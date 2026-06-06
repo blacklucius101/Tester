@@ -502,4 +502,5 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 
 ## Preliminary Error Report
 `Prototype_Custom_Indicator.mq5` is the working indicator up to phase 4.
-`Final_Custom_Indicator.mq5` is the partially working indicator up to phase 6. Partially working because during testing, semafors stop evolving higher/lower with price once a red/lime vertical threshold line is triggered. The semafor remains anchored to its triggering candle even after that candle stops being the highest high/ lowest low of that particular period.
+`Final_Custom_Indicator.mq5` is the partially working indicator up to phase 6. Partially working because during testing, semafors stop evolving higher/lower with price once a red/lime vertical threshold line is triggered. The semafor remains anchored to its triggering candle even after that candle stops being the highest high/ lowest low of that particular period. This seems to be an error in the integration of phases 5 and 6 with the initial 4 phases. Cross-reference `Prototype_Custom_Indicator.mq5` to identify exactly what is wrong.
+Analyze the code and report your findings on this error as comments within the corrected code.
