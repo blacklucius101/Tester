@@ -11,23 +11,23 @@ Include:
 4. A step-by-step execution timeline from startup to normal operation.
 5. Any conditional branches that alter the execution path.
 
-Format the output as:
+Format the output as a decision tree (pure markdown, no visual aids):
 
 Execution Flow Overview
 
 Startup
 1. OnInit()
-   ├─ FunctionA()
-   └─ FunctionB()
+   - FunctionA()
+   - FunctionB()
 
 Runtime (OnCalculate)
 1. OnCalculate()
-   ├─ FunctionC()
-   │  └─ FunctionD()
-   └─ FunctionE()
+   - FunctionC()
+     - FunctionD()
+     - FunctionE()
 
 Shutdown
 1. OnDeinit()
-   └─ FunctionF()
+   - FunctionF()
 
 Focus on actual execution order and call relationships, not code explanations. Keep the document concise and technical.
