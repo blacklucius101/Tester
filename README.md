@@ -1,23 +1,33 @@
-Analyze the code in (Custom_Indicator.mq5) and produce a developer-focused flow-of-operation document that describes the indicator's actual implemented behavior, not its intended behavior.
+Analyze (Custom_Indicator.mq5) and create a concise Flow of Operation document focused on execution order.
 
 Include:
+1. The indicator's entry points (e.g., OnInit, OnCalculate, OnDeinit, timer/chart/event handlers).
+2. The exact sequence in which functions are called during:
+- Indicator initialization
+- Each new tick / recalculation
+- User interactions or events (if applicable)
+- Indicator shutdown
+3. A hierarchical call flow showing which functions call other functions.
+4. A step-by-step execution timeline from startup to normal operation.
+5. Any conditional branches that alter the execution path.
 
-1. Execution Flow
-- Step-by-step flow of OnInit(), OnCalculate(), and any other event handlers.
-- Show the order in which calculations occur.
+Format the output as:
 
-2. Data Flow
-- Trace how each input affects calculations and outputs.
-- Show dependencies between variables, buffers, and signals.
+Execution Flow Overview
 
-3. Signal Logic
-- Exact conditions that produce each output, signal, arrow, color change, alert, or buffer value.
-- Required historical data and state.
+Startup
+1. OnInit()
+   ├─ FunctionA()
+   └─ FunctionB()
 
-4. State & Memory
-- Global variables, static variables, indicator handles, cached values, and how they influence future calculations.
+Runtime (OnCalculate)
+1. OnCalculate()
+   ├─ FunctionC()
+   │  └─ FunctionD()
+   └─ FunctionE()
 
-5. Function Audit
-- For each function: purpose, inputs, outputs, side effects, and callers.
+Shutdown
+1. OnDeinit()
+   └─ FunctionF()
 
-Use exact variable names, function names, buffer names, and conditions from the source code. Be specific and traceable. Do not summarize; document the implementation as if creating technical documentation for debugging and verification.
+Focus on actual execution order and call relationships, not code explanations. Keep the document concise and technical.
