@@ -501,7 +501,9 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 # Phase 7: Review and Testing
 
 ## Preliminary Error Report
-Check for a possible bug:
-If a bald counter-cross candle (open == high/low) is detected, we should ascertain if the associated cross candle was bald. This implies that for ongoing interactions (cross, swipe, cross push), the bald state should be stored for reference. Resistance/Support counter-cross candles, if bald, should necessitate that the associated cross push candle should also be bald.
+Check for possible bugs:
+- Locks, even partial locks (ie. CONFIRMED BOS/MSS), should immediately reset ongoing interactions.
+
+- If BOS/MSS is triggered by a cross push, it becomes subject to balding rules. The confirmation candle cannot be bald and the cross push is not. This mismatch disrupts the triggered BOS/MSS.
 
 Make sure the final corrected code compiles in the MetaTrader 5 platform without triggering any errors or warnings.
