@@ -121,13 +121,13 @@ struct LevelState;
 
 struct BorderState;
 
-void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &pOpen[], const double &pHigh[], const double &pLow[], const double &pClose[], const datetime &pTime[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2, bool isInvalid);
-void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool isInvalid);
-void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool isInvalid);
-void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool isInvalid);
-void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool isInvalid);
-void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool isInvalid);
-void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool isInvalid);
+void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &pOpen[], const double &pHigh[], const double &pLow[], const double &pClose[], const datetime &pTime[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2, bool touchedOuter);
+void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool touchedOuter);
+void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool touchedOuter);
+void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
+void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter);
+void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
+void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
 
 //--- Anchor structure for state retention
 struct SemaforAnchor {
@@ -542,33 +542,19 @@ int OnCalculate(const int rates_total,
          }
       }
 
-      // --- Invalid Candle Check (Phase 5 Rule) ---
-      // "A candle must not contact the outer borders unless it is a push candle. 
-      // Non-push candles contacting the outer borders are invalid cross/counter-cross candle candidates."
-      bool isInvalidCandidate = false;
-      bool bullPushAllowed = (!stateL2.bullishLock && !stateL2.bearishLock) || stateL2.bearishLock || (stateL2.bosMssState == BOS_MSS_CONFIRMED_BOS || stateL2.bosMssState == BOS_MSS_CONFIRMED_MSS);
-      bool bearPushAllowed = (!stateL2.bullishLock && !stateL2.bearishLock) || stateL2.bullishLock || (stateL2.bosMssState == BOS_MSS_CONFIRMED_BOS || stateL2.bosMssState == BOS_MSS_CONFIRMED_MSS);
-      
-      if(i > stateL2.firstBarOfDay && BufferUp[i] != EMPTY_VALUE && BufferUp[i-1] != EMPTY_VALUE) {
-         bool isPush = false;
-         if(bullPushAllowed && BufferUp[i] > BufferUp[i-1]) isPush = true;
-         if(bearPushAllowed && BufferDown[i] < BufferDown[i-1]) isPush = true;
-         
-         if(!isPush) {
-            if(high[i] >= BufferUp[i] || low[i] <= BufferDown[i]) {
-               isInvalidCandidate = true;
-            }
-         }
-      }
+      // --- Phase 7: Touched Outer Flag ---
+      bool touchedOuter = false;
+      if(BufferUp[i] != EMPTY_VALUE && high[i] >= BufferUp[i]) touchedOuter = true;
+      if(BufferDown[i] != EMPTY_VALUE && low[i] <= BufferDown[i]) touchedOuter = true;
 
-      ProcessLevel(i, L1_PERIOD, L1_BACKSTEP, stateL1.firstBarOfDay, open, high, low, close, time, stateL1, BufferL1H, BufferL1L, false, isInvalidCandidate);
-      ProcessLevel(i, L2_PERIOD, L2_BACKSTEP, stateL2.firstBarOfDay, open, high, low, close, time, stateL2, BufferL2H, BufferL2L, true, isInvalidCandidate);
+      ProcessLevel(i, L1_PERIOD, L1_BACKSTEP, stateL1.firstBarOfDay, open, high, low, close, time, stateL1, BufferL1H, BufferL1L, false, touchedOuter);
+      ProcessLevel(i, L2_PERIOD, L2_BACKSTEP, stateL2.firstBarOfDay, open, high, low, close, time, stateL2, BufferL2H, BufferL2L, true, touchedOuter);
 
       // Phase 5 processing (mainly driven by Level 2 state locks)
-      ProcessPhase5(i, open, high, low, close, stateL2, isInvalidCandidate);
+      ProcessPhase5(i, open, high, low, close, stateL2, touchedOuter);
       
       // Phase 6 BOS/MSS confirmation and reset handling
-      HandleBOSMSS(i, open, high, low, close, time, stateL2, isInvalidCandidate);
+      HandleBOSMSS(i, open, high, low, close, time, stateL2, touchedOuter);
    }
 
    return(rates_total);
@@ -596,7 +582,7 @@ bool IsMidlineTouch(double pOpen, double pHigh, double pLow, double pClose, doub
 //+------------------------------------------------------------------+
 //| Process Phase 5 interactions                                     |
 //+------------------------------------------------------------------+
-void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool isInvalid) {
+void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool touchedOuter) {
    if(idx < 1) return;
    
    double up = BufferUp[idx];
@@ -619,20 +605,20 @@ void ProcessPhase5(int idx, const double &open[], const double &high[], const do
    double curSup = resSupExists ? sup : EMPTY_VALUE;
 
    // --- Push Event Logic ---
-   HandlePushEvents(idx, open, high, low, close, state, up, down, curMid, curRes, curSup, isInvalid);
+   HandlePushEvents(idx, open, high, low, close, state, up, down, curMid, curRes, curSup, touchedOuter);
 
    // --- Candle-Border Interaction Logic ---
    if(state.bullishLock) {
-      HandleBullishInteractions(idx, open, high, low, close, state, up, down, curMid, curRes, curSup, isInvalid);
+      HandleBullishInteractions(idx, open, high, low, close, state, up, down, curMid, curRes, curSup, touchedOuter);
    } else if(state.bearishLock) {
-      HandleBearishInteractions(idx, open, high, low, close, state, up, down, curMid, curRes, curSup, isInvalid);
+      HandleBearishInteractions(idx, open, high, low, close, state, up, down, curMid, curRes, curSup, touchedOuter);
    }
 }
 
 //+------------------------------------------------------------------+
 //| Push Event Logic                                                 |
 //+------------------------------------------------------------------+
-void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool isInvalid) {
+void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter) {
    double prevUp = BufferUp[idx-1];
    double prevDown = BufferDown[idx-1];
    if(prevUp == EMPTY_VALUE || prevDown == EMPTY_VALUE) return;
@@ -755,11 +741,10 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
    // 2. Monitor for counter-cross of pushed extremes
    // Bullish Push Counter-cross (at Resistance)
    if(state.bullPushState.active && res != EMPTY_VALUE) {
-      if(isInvalid) {
+      bool isPush = (up > prevUp);
+      if(touchedOuter && !isPush) {
           // Non-push candle contacting outer border is invalid counter-cross candidate
-          // Does it disrupt? The rules say: "Once an anchor is finalized outside its repaint scope, it becomes immutable..."
-          // "There should be no intervening bullish candles between the bullish cross push candle and the resistance counter-cross candle. These disrupt the bullish push."
-          // If a candle is invalid, it is not a counter-cross. If it's bullish, it might disrupt.
+          // and disrupts the push if it's bullish
           if(close[idx] > open[idx]) state.bullPushState.active = false;
       } else 
       // Disruption: intervening bullish candle (except for CC push itself if it's the trigger)
@@ -812,7 +797,8 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
 
    // Bearish Push Counter-cross (at Support)
    if(state.bearPushState.active && sup != EMPTY_VALUE) {
-      if(isInvalid) {
+      bool isPush = (down < prevDown);
+      if(touchedOuter && !isPush) {
           if(close[idx] < open[idx]) state.bearPushState.active = false;
       } else
       // Disruption: intervening bearish candle
@@ -863,55 +849,57 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
 //+------------------------------------------------------------------+
 //| Bullish Interaction Logic                                        |
 //+------------------------------------------------------------------+
-void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool isInvalid) {
+void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter) {
    // If BOS/MSS is confirmed, resistance zone and midline become partial bearish lock zones
    bool resMidAgree = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
    
    // Support is always disagreeing internal border for active bullish lock
-   ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true, isInvalid);
+   ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true, touchedOuter);
    
    if(resMidAgree) {
       // Normal bullish lock logic
-      ProcessInteraction(idx, open, high, low, close, state.resState, res, true, true, state, true, isInvalid);
-      ProcessInteraction(idx, open, high, low, close, state.midState, mid, true, true, state, true, isInvalid);
+      ProcessInteraction(idx, open, high, low, close, state.resState, res, true, true, state, true, touchedOuter);
+      ProcessInteraction(idx, open, high, low, close, state.midState, mid, true, true, state, true, touchedOuter);
    } else {
       // BOS/MSS Confirmed: Resistance and Midline switch to Bearish interaction logic
       // Resistance is disagreeing for bearish lock
-      ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false, isInvalid);
+      ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false, touchedOuter);
       // Midline uses agreeing rules for any lock
-      ProcessInteraction(idx, open, high, low, close, state.midState, mid, false, true, state, false, isInvalid);
+      ProcessInteraction(idx, open, high, low, close, state.midState, mid, false, true, state, false, touchedOuter);
    }
 }
 
 //+------------------------------------------------------------------+
 //| Bearish Interaction Logic                                        |
 //+------------------------------------------------------------------+
-void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool isInvalid) {
+void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter) {
    // If BOS/MSS is confirmed, support zone and midline become partial bullish lock zones
    bool supMidAgree = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
    
    // Resistance is always disagreeing internal border for active bearish lock
-   ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false, isInvalid);
+   ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false, touchedOuter);
    
    if(supMidAgree) {
       // Normal bearish lock logic
-      ProcessInteraction(idx, open, high, low, close, state.midState, mid, false, true, state, false, isInvalid);
-      ProcessInteraction(idx, open, high, low, close, state.supState, sup, false, true, state, false, isInvalid);
+      ProcessInteraction(idx, open, high, low, close, state.midState, mid, false, true, state, false, touchedOuter);
+      ProcessInteraction(idx, open, high, low, close, state.supState, sup, false, true, state, false, touchedOuter);
    } else {
       // BOS/MSS Confirmed: Support and Midline switch to Bullish interaction logic
       // Midline uses agreeing rules
-      ProcessInteraction(idx, open, high, low, close, state.midState, mid, true, true, state, true, isInvalid);
+      ProcessInteraction(idx, open, high, low, close, state.midState, mid, true, true, state, true, touchedOuter);
       // Support is disagreeing for bullish lock
-      ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true, isInvalid);
+      ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true, touchedOuter);
    }
 }
 
 //+------------------------------------------------------------------+
 //| Phase 6 BOS/MSS Logic                                            |
 //+------------------------------------------------------------------+
-void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool isInvalid) {
-   if(!state.bullishLock && !state.bearishLock) return;
+void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool touchedOuter) {
+   if(idx < 1 || (!state.bullishLock && !state.bearishLock)) return;
 
+   double up  = BufferUp[idx];
+   double down = BufferDown[idx];
    double res = BufferResistance[idx];
    double sup = BufferSupport[idx];
    double mid = BufferMid[idx];
@@ -952,7 +940,11 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
             confirmAttempt = true;
             
             // Apply Phase 5 rules
-            bool valid = !isInvalid; // Candidate must not contact outer border if not a push
+            double prevUp = BufferUp[idx-1];
+            bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
+            bool valid = true;
+            if(touchedOuter && !isPush) valid = false; // Candidate must not contact outer border if not a push
+            
             int crossed = 0;
             if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
             if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
@@ -993,7 +985,10 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
          if(sup != EMPTY_VALUE && close[idx] > sup) {
             confirmAttempt = true;
             
-            bool valid = !isInvalid;
+            bool isPush = (down < BufferDown[idx-1]);
+            bool valid = true;
+            if(touchedOuter && !isPush) valid = false;
+            
             int crossed = 0;
             if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
             if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
@@ -1074,7 +1069,12 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
             if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
             if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
             
-            if(crossed <= 1 && !isInvalid) {
+            double prevDown = BufferDown[idx-1];
+            bool isPush = (prevDown != EMPTY_VALUE && down < prevDown);
+            bool valid = (crossed <= 1);
+            if(touchedOuter && !isPush) valid = false;
+
+            if(valid) {
                state.bosMssState = BOS_MSS_NONE;
             }
          }
@@ -1086,7 +1086,12 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
             if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
             if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
             
-            if(crossed <= 1 && !isInvalid) {
+            double prevUp = BufferUp[idx-1];
+            bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
+            bool valid = (crossed <= 1);
+            if(touchedOuter && !isPush) valid = false;
+
+            if(valid) {
                state.bosMssState = BOS_MSS_NONE;
             }
          }
@@ -1097,10 +1102,14 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
 //+------------------------------------------------------------------+
 //| Generic Interaction Processor                                    |
 //+------------------------------------------------------------------+
-void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool isInvalid) {
+void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter) {
    if(border == EMPTY_VALUE) {
       bs.activeType = INT_NONE;
       return;
+   }
+
+   if(touchedOuter) {
+      bs.activeType = INT_NONE;
    }
    
    // Check staleness (failed balding)
@@ -1144,7 +1153,7 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
 
       if(counterCross) {
          // Validate rules: max crossing, midline touch, balding
-         bool valid = !isInvalid;
+         bool valid = true;
          
          // Border crossing rules
          int crossed = 0;
@@ -1222,7 +1231,7 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
    }
 
    // 2. Check for new Cross/Swipe
-   if(isInvalid) return; // Cannot be a cross/swipe if invalid
+   if(touchedOuter) return; // Cannot be a cross/swipe if touched outer (even if push, push handled separately)
 
    int crossed = 0;
    if(IsClosedThrough(open[idx], close[idx], r)) crossed++;
@@ -1359,7 +1368,7 @@ void UpdateL2LowConnection(const SemaforAnchor &a1, const SemaforAnchor &a2) {
 //+------------------------------------------------------------------+
 //| Process semafors for a specific level and candle index           |
 //+------------------------------------------------------------------+
-void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &pOpen[], const double &pHigh[], const double &pLow[], const double &pClose[], const datetime &pTime[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2, bool isInvalid) {
+void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &pOpen[], const double &pHigh[], const double &pLow[], const double &pClose[], const datetime &pTime[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2, bool touchedOuter) {
    // Check if enough candles exist since the start of the day to satisfy Period requirement
    if(idx - firstBar < period - 1) return;
 
@@ -1410,7 +1419,11 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                      res = BufferResistance[idx];
                      up = BufferUp[idx];
                      inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] > res && pOpen[idx] < up) || (pClose[idx] > res && pClose[idx] < up)));
-                     if(inZone && !isInvalid) {
+                     double prevUp = BufferUp[idx-1];
+                     bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
+                     bool valid = true;
+                     if(touchedOuter && !isPush) valid = false;
+                     if(inZone && valid) {
                         double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
                         double val = state.totalContractionBullish + current_temp;
                         if(val <= -24000) { 
@@ -1473,7 +1486,11 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                   res = BufferResistance[idx];
                   up = BufferUp[idx];
                   inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] > res && pOpen[idx] < up) || (pClose[idx] > res && pClose[idx] < up)));
-                  if(inZone && !isInvalid) { // BOS/MSS trigger can be confirmation candle, so must follow rules
+                  double prevUp = BufferUp[idx-1];
+                  bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
+                  bool valid = true;
+                  if(touchedOuter && !isPush) valid = false;
+                  if(inZone && valid) { // BOS/MSS trigger can be confirmation candle, so must follow rules
                      double current_temp = (state.highAnchors[1].price - state.highAnchors[0].price) / _Point;
                      double val = state.totalContractionBullish + current_temp;
                      if(val <= -24000) { 
@@ -1537,7 +1554,11 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                      sup = BufferSupport[idx];
                      dn = BufferDown[idx];
                      inZone = (sup != EMPTY_VALUE && dn != EMPTY_VALUE && ((pOpen[idx] < sup && pOpen[idx] > dn) || (pClose[idx] < sup && pClose[idx] > dn)));
-                     if(inZone && !isInvalid) {
+                     double prevDown = BufferDown[idx-1];
+                     bool isPush = (prevDown != EMPTY_VALUE && dn < prevDown);
+                     bool valid = true;
+                     if(touchedOuter && !isPush) valid = false;
+                     if(inZone && valid) {
                         double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
                         double val = state.totalContractionBearish + current_temp;
                         if(val >= 24000) { 
@@ -1600,7 +1621,11 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                   sup = BufferSupport[idx];
                   dn = BufferDown[idx];
                   inZone = (sup != EMPTY_VALUE && dn != EMPTY_VALUE && ((pOpen[idx] < sup && pOpen[idx] > dn) || (pClose[idx] < sup && pClose[idx] > dn)));
-                  if(inZone && !isInvalid) {
+                  double prevDown = BufferDown[idx-1];
+                  bool isPush = (prevDown != EMPTY_VALUE && dn < prevDown);
+                  bool valid = true;
+                  if(touchedOuter && !isPush) valid = false;
+                  if(inZone && valid) {
                      double current_temp = (state.lowAnchors[1].price - state.lowAnchors[0].price) / _Point;
                      double val = state.totalContractionBearish + current_temp;
                      if(val >= 24000) { 
