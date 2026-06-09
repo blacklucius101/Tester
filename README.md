@@ -414,7 +414,7 @@ Counter-cross candles are immune to this midline touch.
 
 Equality (close/open == border) counts as a border crossing when evaluating maximum border crossings.
 
-A candle must not contact the outer borders unless it is a push candle. Non-push candles contacting the outer borders are invalid cross/counter-cross candle candidates.
+Only push candles may contact the outer borders.
 
 The special midline push candle must not close through any border.
 
@@ -502,8 +502,6 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 
 ## Preliminary Error Report
 Check for a possible bug:
-When the bullish lock is active, if a bearish candle forms a valid cross at the support, immediately followed by an unusual bullish candle that forms the counter-cross candle. The unusual counter-cross candle will be highlighted, incorrectly. Unusual because the counter-cross candle pushes down the lower line to form a new extreme, before closing back bullish above the support. The order of operation means push events are processed first, of which this bullish candle doesn't qualify as a counter-cross push because the preceding candle doesn't touch the outer border. This bullish candle will however pass as a counter-cross candle in the next processing step. This is wrong. Only push candles are allowed to make contact with the outer borders, and thus a failed push cannot be used as a counter-cross candle.
+A candle touching an outer border should trigger a flag that allows push event processing, but prevents internal border cross/counter-cross processing on that same candle.
 
-I suspect this even happens for cross candles. Record the identified issues as comments alongside the corrected code.
-
-Conduct a review pass to ensure the corrected code satisfies expected requirements. Ensure the final code compiles in MetaTrader 5 without triggering errors or warnings.
+Make sure the final corrected code compiles in the MetaTrader 5 platform without triggering any errors or warnings.
