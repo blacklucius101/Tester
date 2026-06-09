@@ -502,6 +502,6 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 
 ## Preliminary Error Report
 Check for a possible bug:
-A candle touching an outer border should trigger a flag that allows push event processing, but prevents internal border cross/counter-cross processing on that same candle.
+If a bald counter-cross candle (open == high/low) is detected, we should ascertain if the associated cross candle was bald. This implies that for ongoing interactions (cross, swipe, cross push), the bald state should be stored for reference. Resistance/Support counter-cross candles, if bald, should necessitate that the associated cross push candle should also be bald.
 
 Make sure the final corrected code compiles in the MetaTrader 5 platform without triggering any errors or warnings.
