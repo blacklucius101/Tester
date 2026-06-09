@@ -501,9 +501,9 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 # Phase 7: Review and Testing
 
 ## Preliminary Error Report
-Check for a possible bug.
+Check for a possible bug:
 When the bullish lock is active, if a bearish candle forms a valid cross at the support, immediately followed by an unusual bullish candle that forms the counter-cross candle. The unusual counter-cross candle will be highlighted, incorrectly. Unusual because the counter-cross candle pushes down the lower line to form a new extreme, before closing back bullish above the support. The order of operation means push events are processed first, of which this bullish candle doesn't qualify as a counter-cross push because the preceding candle doesn't touch the outer border. This bullish candle will however pass as a counter-cross candle in the next processing step. This is wrong. Only push candles are allowed to make contact with the outer borders, and thus a failed push cannot be used as a counter-cross candle.
 
-Record the identified issues as comments alongside the corrected code.
+I suspect this even happens for cross candles. Record the identified issues as comments alongside the corrected code.
 
 Conduct a review pass to ensure the corrected code satisfies expected requirements. Ensure the final code compiles in MetaTrader 5 without triggering errors or warnings.
