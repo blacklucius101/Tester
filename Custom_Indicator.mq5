@@ -215,21 +215,37 @@ int OnInit()
    IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
 
    //--- indicator buffers mapping
+   //--- use normal array indexing (oldest bar at index 0)
    SetIndexBuffer(0, BufferUp, INDICATOR_DATA);
+   ArraySetAsSeries(BufferUp, false);
    SetIndexBuffer(1, BufferDown, INDICATOR_DATA);
+   ArraySetAsSeries(BufferDown, false);
    SetIndexBuffer(2, BufferMid, INDICATOR_DATA);
+   ArraySetAsSeries(BufferMid, false);
    SetIndexBuffer(3, BufferResistance, INDICATOR_DATA);
+   ArraySetAsSeries(BufferResistance, false);
    SetIndexBuffer(4, BufferSupport, INDICATOR_DATA);
+   ArraySetAsSeries(BufferSupport, false);
    SetIndexBuffer(5, BufferResFilling1, INDICATOR_DATA);
+   ArraySetAsSeries(BufferResFilling1, false);
    SetIndexBuffer(6, BufferResFilling2, INDICATOR_DATA);
+   ArraySetAsSeries(BufferResFilling2, false);
    SetIndexBuffer(7, BufferSupFilling1, INDICATOR_DATA);
+   ArraySetAsSeries(BufferSupFilling1, false);
    SetIndexBuffer(8, BufferSupFilling2, INDICATOR_DATA);
+   ArraySetAsSeries(BufferSupFilling2, false);
    SetIndexBuffer(9, BufferL1H, INDICATOR_DATA);
+   ArraySetAsSeries(BufferL1H, false);
    SetIndexBuffer(10, BufferL1L, INDICATOR_DATA);
+   ArraySetAsSeries(BufferL1L, false);
    SetIndexBuffer(11, BufferL2H, INDICATOR_DATA);
+   ArraySetAsSeries(BufferL2H, false);
    SetIndexBuffer(12, BufferL2L, INDICATOR_DATA);
+   ArraySetAsSeries(BufferL2L, false);
    SetIndexBuffer(13, BufferBullishEvents, INDICATOR_DATA);
+   ArraySetAsSeries(BufferBullishEvents, false);
    SetIndexBuffer(14, BufferBearishEvents, INDICATOR_DATA);
+   ArraySetAsSeries(BufferBearishEvents, false);
 
    //--- set arrow codes for Level 1 and Level 2
    PlotIndexSetInteger(7, PLOT_ARROW, L1_ARROW);
