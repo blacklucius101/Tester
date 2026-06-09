@@ -117,18 +117,6 @@ const int L2_PERIOD = 13;
 const int L2_BACKSTEP = 6;
 const int L2_ARROW = 108;
 
-struct LevelState;
-
-struct BorderState;
-
-void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &pOpen[], const double &pHigh[], const double &pLow[], const double &pClose[], const datetime &pTime[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2, bool touchedOuter);
-void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool touchedOuter);
-void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool touchedOuter);
-void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
-void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter);
-void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
-void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
-
 //--- Anchor structure for state retention
 struct SemaforAnchor {
    int      barIndex;
@@ -159,6 +147,8 @@ struct BorderState {
    double           precedingExtreme;
    bool             isStale;
    double           staleLevel;
+   bool             isTriggerBald;
+   double           triggerBaldPrice;
 };
 
 struct PushState {
@@ -167,6 +157,8 @@ struct PushState {
    int              triggerBarIdx;
    double           triggerOpen;
    double           extremeBetween;
+   bool             isTriggerBald;
+   double           triggerBaldPrice;
 };
 
 struct LevelState {
@@ -198,8 +190,30 @@ struct LevelState {
    bool          bosMssIsCrossPush;
    double        bosMssTriggerOpen;
    double        bosMssExtremeBetween;
+   bool          bosMssIsTriggerBald;
+   double        bosMssTriggerBaldPrice;
    int           bosMssTriggerSemaforId;
 };
+
+//--- Function Prototypes
+void ProcessLevel(int idx, int period, int backstep, int firstBar, const double &pOpen[], const double &pHigh[], const double &pLow[], const double &pClose[], const datetime &pTime[], LevelState &state, double &bufH[], double &bufL[], bool isLevel2, bool touchedOuter);
+void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool touchedOuter);
+void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool touchedOuter);
+void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
+void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter);
+void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
+void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
+void ResetBorderState(BorderState &bs);
+void ResetPushState(PushState &ps);
+void ResetLevelState(LevelState &state);
+void TriggerBullishLock(LevelState &state, int barIdx, datetime t);
+void TriggerBearishLock(LevelState &state, int barIdx, datetime t);
+void DrawLockLine(int barIdx, datetime t, color clr, string prefix);
+void DrawBOSMSSLine(int barIdx, datetime t);
+void UpdateL2Trend(string name, datetime t1, double p1, datetime t2, double p2, color clr);
+void UpdateL2Text(string name, datetime t, double p, string text, color clr, bool isHigh);
+void UpdateL2HighConnection(const SemaforAnchor &a1, const SemaforAnchor &a2);
+void UpdateL2LowConnection(const SemaforAnchor &a1, const SemaforAnchor &a2);
 
 LevelState stateL1;
 LevelState stateL2;
@@ -329,6 +343,8 @@ void TriggerBullishLock(LevelState &state, int barIdx, datetime t) {
    state.bosMssIsCrossPush = false;
    state.bosMssTriggerOpen = 0;
    state.bosMssExtremeBetween = 0;
+   state.bosMssIsTriggerBald = false;
+   state.bosMssTriggerBaldPrice = 0;
    state.bosMssTriggerSemaforId = -1;
 }
 
@@ -356,6 +372,8 @@ void TriggerBearishLock(LevelState &state, int barIdx, datetime t) {
    state.bosMssIsCrossPush = false;
    state.bosMssTriggerOpen = 0;
    state.bosMssExtremeBetween = 0;
+   state.bosMssIsTriggerBald = false;
+   state.bosMssTriggerBaldPrice = 0;
    state.bosMssTriggerSemaforId = -1;
 }
 
@@ -377,6 +395,8 @@ void ResetBorderState(BorderState &bs) {
    bs.precedingExtreme = 0;
    bs.isStale = false;
    bs.staleLevel = 0;
+   bs.isTriggerBald = false;
+   bs.triggerBaldPrice = 0;
 }
 
 void ResetPushState(PushState &ps) {
@@ -385,6 +405,8 @@ void ResetPushState(PushState &ps) {
    ps.triggerBarIdx = -1;
    ps.triggerOpen = 0;
    ps.extremeBetween = 0;
+   ps.isTriggerBald = false;
+   ps.triggerBaldPrice = 0;
 }
 
 void ResetLevelState(LevelState &state) {
@@ -419,6 +441,10 @@ void ResetLevelState(LevelState &state) {
 
    state.bosMssState = BOS_MSS_NONE;
    state.bosMssTriggerIdx = -1;
+   state.bosMssIsPush = false;
+   state.bosMssIsCrossPush = false;
+   state.bosMssTriggerOpen = 0;
+   state.bosMssExtremeBetween = 0;
    state.bosMssTriggerSemaforId = -1;
 }
 
@@ -645,12 +671,16 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                state.bullPushState.triggerBarIdx = idx;
                state.bullPushState.triggerOpen = open[idx];
                state.bullPushState.extremeBetween = MathMin(low[idx], low[idx-1]);
+               state.bullPushState.isTriggerBald = (high[idx] == close[idx]);
+               state.bullPushState.triggerBaldPrice = close[idx];
 
                if(state.bosMssTriggerIdx == idx && (state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS)) {
                   state.bosMssIsPush = true;
                   state.bosMssIsCrossPush = true;
                   state.bosMssTriggerOpen = state.bullPushState.triggerOpen;
                   state.bosMssExtremeBetween = state.bullPushState.extremeBetween;
+                  state.bosMssIsTriggerBald = state.bullPushState.isTriggerBald;
+                  state.bosMssTriggerBaldPrice = state.bullPushState.triggerBaldPrice;
                }
             } else {
                state.bullPushState.active = false;
@@ -669,6 +699,8 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                   state.bosMssIsCrossPush = false;
                   state.bosMssTriggerOpen = state.bullPushState.triggerOpen;
                   state.bosMssExtremeBetween = 0;
+                  state.bosMssIsTriggerBald = false;
+                  state.bosMssTriggerBaldPrice = 0;
                }
             } else {
                state.bullPushState.active = false; 
@@ -702,12 +734,16 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                state.bearPushState.triggerBarIdx = idx;
                state.bearPushState.triggerOpen = open[idx];
                state.bearPushState.extremeBetween = MathMax(high[idx], high[idx-1]);
+               state.bearPushState.isTriggerBald = (low[idx] == close[idx]);
+               state.bearPushState.triggerBaldPrice = close[idx];
 
                if(state.bosMssTriggerIdx == idx && (state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS)) {
                   state.bosMssIsPush = true;
                   state.bosMssIsCrossPush = true;
                   state.bosMssTriggerOpen = state.bearPushState.triggerOpen;
                   state.bosMssExtremeBetween = state.bearPushState.extremeBetween;
+                  state.bosMssIsTriggerBald = state.bearPushState.isTriggerBald;
+                  state.bosMssTriggerBaldPrice = state.bearPushState.triggerBaldPrice;
                }
             } else {
                state.bearPushState.active = false;
@@ -726,6 +762,8 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                   state.bosMssIsCrossPush = false;
                   state.bosMssTriggerOpen = state.bearPushState.triggerOpen;
                   state.bosMssExtremeBetween = 0;
+                  state.bosMssIsTriggerBald = false;
+                  state.bosMssTriggerBaldPrice = 0;
                }
             } else {
                state.bearPushState.active = false;
@@ -760,13 +798,10 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                if(low[idx] < state.bullPushState.extremeBetween + 0.5 * range) valid = false;
                
                // Balding for cross push
-               bool crossBald = (low[state.bullPushState.triggerBarIdx] == close[state.bullPushState.triggerBarIdx]);
-               bool ccBald = (low[idx] == open[idx]);
-               if(crossBald || ccBald) {
-                  if(!(crossBald && ccBald && (idx == state.bullPushState.triggerBarIdx + 1))) {
+               bool ccBald = (high[idx] == open[idx]);
+               if(state.bullPushState.isTriggerBald || ccBald) {
+                  if(!(state.bullPushState.isTriggerBald && ccBald && (idx == state.bullPushState.triggerBarIdx + 1) && (state.bullPushState.triggerBaldPrice == open[idx]))) {
                      valid = false;
-                     // We don't mark stale here as push levels are dynamic/outer, 
-                     // but requirements say "failed balding invalidates that particular border level"
                   }
                }
             }
@@ -814,10 +849,9 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                if(high[idx] > state.bearPushState.extremeBetween - 0.5 * range) valid = false;
                
                // Balding for cross push
-               bool crossBald = (high[state.bearPushState.triggerBarIdx] == close[state.bearPushState.triggerBarIdx]);
-               bool ccBald = (high[idx] == open[idx]);
-               if(crossBald || ccBald) {
-                  if(!(crossBald && ccBald && (idx == state.bearPushState.triggerBarIdx + 1))) {
+               bool ccBald = (low[idx] == open[idx]);
+               if(state.bearPushState.isTriggerBald || ccBald) {
+                  if(!(state.bearPushState.isTriggerBald && ccBald && (idx == state.bearPushState.triggerBarIdx + 1) && (state.bearPushState.triggerBaldPrice == open[idx]))) {
                      valid = false;
                   }
                }
@@ -959,10 +993,9 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
                   if(low[idx] < state.bosMssExtremeBetween + 0.5 * range) valid = false;
                   
                   // Balding for cross push exception
-                  bool crossBald = (low[state.bosMssTriggerIdx] == close[state.bosMssTriggerIdx]);
-                  bool ccBald = (low[idx] == open[idx]);
-                  if(crossBald || ccBald) {
-                     if(!(crossBald && ccBald && (idx == state.bosMssTriggerIdx + 1))) {
+                  bool ccBald = (high[idx] == open[idx]);
+                  if(state.bosMssIsTriggerBald || ccBald) {
+                     if(!(state.bosMssIsTriggerBald && ccBald && (idx == state.bosMssTriggerIdx + 1) && (state.bosMssTriggerBaldPrice == open[idx]))) {
                         valid = false;
                      }
                   }
@@ -1001,10 +1034,9 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
                   if(high[idx] > state.bosMssExtremeBetween - 0.5 * range) valid = false;
                   
                   // Balding for cross push exception
-                  bool crossBald = (high[state.bosMssTriggerIdx] == close[state.bosMssTriggerIdx]);
-                  bool ccBald = (high[idx] == open[idx]);
-                  if(crossBald || ccBald) {
-                     if(!(crossBald && ccBald && (idx == state.bosMssTriggerIdx + 1))) {
+                  bool ccBald = (low[idx] == open[idx]);
+                  if(state.bosMssIsTriggerBald || ccBald) {
+                     if(!(state.bosMssIsTriggerBald && ccBald && (idx == state.bosMssTriggerIdx + 1) && (state.bosMssTriggerBaldPrice == open[idx]))) {
                         valid = false;
                      }
                   }
@@ -1197,19 +1229,17 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
          }
 
          // Balding
-         if(border != m && (border == r || border == s || border == BufferUp[idx] || border == BufferDown[idx])) {
-            bool crossBald = false;
+         if(border != m && (border == r || border == s)) {
             bool ccBald = false;
             if(isBullishLock) {
-               if(low[bs.triggerBarIdx] == close[bs.triggerBarIdx]) crossBald = true;
                if(low[idx] == open[idx]) ccBald = true;
             } else {
-               if(high[bs.triggerBarIdx] == close[bs.triggerBarIdx]) crossBald = true;
                if(high[idx] == open[idx]) ccBald = true;
             }
             
-            if(crossBald || ccBald) {
-               if(crossBald && ccBald && (idx == bs.triggerBarIdx + 1)) {
+            if(bs.isTriggerBald || ccBald) {
+               // Check if they form a matching pair
+               if(bs.isTriggerBald && ccBald && (idx == bs.triggerBarIdx + 1) && (close[bs.triggerBarIdx] == open[idx])) {
                   // Valid balding pair
                } else {
                   // Failed balding
@@ -1248,6 +1278,8 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
             bs.triggerBarIdx = idx;
             bs.triggerOpen = open[idx];
             bs.precedingExtreme = high[idx-1];
+            bs.isTriggerBald = (low[idx] == close[idx]);
+            bs.triggerBaldPrice = close[idx];
          } else bs.activeType = INT_NONE;
       }
       // (Bullish) Swipe: upper wick touches border
@@ -1257,6 +1289,8 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
             bs.triggerBarIdx = idx;
             bs.triggerOpen = open[idx];
             bs.precedingExtreme = high[idx-1];
+            bs.isTriggerBald = (low[idx] == close[idx]);
+            bs.triggerBaldPrice = close[idx];
          } else bs.activeType = INT_NONE;
       }
       // Special midline counter-cross push
@@ -1271,6 +1305,8 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
             bs.triggerBarIdx = idx;
             bs.triggerOpen = open[idx];
             bs.precedingExtreme = low[idx-1];
+            bs.isTriggerBald = (high[idx] == close[idx]);
+            bs.triggerBaldPrice = close[idx];
          } else bs.activeType = INT_NONE;
       }
       // (Bearish) Swipe: lower wick touches border
@@ -1280,6 +1316,8 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
             bs.triggerBarIdx = idx;
             bs.triggerOpen = open[idx];
             bs.precedingExtreme = low[idx-1];
+            bs.isTriggerBald = (high[idx] == close[idx]);
+            bs.triggerBaldPrice = close[idx];
          } else bs.activeType = INT_NONE;
       }
       // Special midline counter-cross push
@@ -1497,11 +1535,17 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                         state.bosMssState = BOS_MSS_TRIGGERED_MSS; 
                         state.bosMssTriggerIdx = idx; 
                         state.bosMssTriggerSemaforId = state.highAnchors[1].id;
+                        state.bosMssIsPush = false;
+                        state.bosMssIsCrossPush = false;
+                        state.bosMssIsTriggerBald = false;
                      }
                      else if(val <= -9500) { 
                         state.bosMssState = BOS_MSS_TRIGGERED_BOS; 
                         state.bosMssTriggerIdx = idx; 
                         state.bosMssTriggerSemaforId = state.highAnchors[1].id;
+                        state.bosMssIsPush = false;
+                        state.bosMssIsCrossPush = false;
+                        state.bosMssIsTriggerBald = false;
                      }
                   }
                }
@@ -1632,11 +1676,17 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                         state.bosMssState = BOS_MSS_TRIGGERED_MSS; 
                         state.bosMssTriggerIdx = idx; 
                         state.bosMssTriggerSemaforId = state.lowAnchors[1].id;
+                        state.bosMssIsPush = false;
+                        state.bosMssIsCrossPush = false;
+                        state.bosMssIsTriggerBald = false;
                      }
                      else if(val >= 9500) { 
                         state.bosMssState = BOS_MSS_TRIGGERED_BOS; 
                         state.bosMssTriggerIdx = idx; 
                         state.bosMssTriggerSemaforId = state.lowAnchors[1].id;
+                        state.bosMssIsPush = false;
+                        state.bosMssIsCrossPush = false;
+                        state.bosMssIsTriggerBald = false;
                      }
                   }
                }
