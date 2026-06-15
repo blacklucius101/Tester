@@ -114,7 +114,7 @@ const int L1_BACKSTEP = 2;
 const int L1_ARROW = 159;
 
 const int L2_PERIOD = 13;
-const int L2_BACKSTEP = 6;
+const int L2_BACKSTEP = 5;
 const int L2_ARROW = 108;
 
 //--- Anchor structure for state retention
@@ -782,8 +782,8 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
       bool isPush = (up > prevUp);
       if(touchedOuter && !isPush) {
           // Non-push candle contacting outer border is invalid counter-cross candidate
-          // and disrupts the push if it's bullish
-          if(close[idx] > open[idx]) state.bullPushState.active = false;
+          // and disrupts the push
+          state.bullPushState.active = false;
       } else 
       // Disruption: intervening bullish candle (except for CC push itself if it's the trigger)
       if(idx > state.bullPushState.triggerBarIdx && close[idx] > open[idx]) {
@@ -834,7 +834,7 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
    if(state.bearPushState.active && sup != EMPTY_VALUE) {
       bool isPush = (down < prevDown);
       if(touchedOuter && !isPush) {
-          if(close[idx] < open[idx]) state.bearPushState.active = false;
+          state.bearPushState.active = false;
       } else
       // Disruption: intervening bearish candle
       if(idx > state.bearPushState.triggerBarIdx && close[idx] < open[idx]) {
@@ -1082,6 +1082,13 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
 
          if(!lockTriggered) {
             DrawBOSMSSLine(idx, time[idx]);
+				
+			   // Reset Phase 5 interaction states on BOSMSS line plot
+				ResetBorderState(state.resState);
+				ResetBorderState(state.midState);
+				ResetBorderState(state.supState);
+				ResetPushState(state.bullPushState);
+				ResetPushState(state.bearPushState);	
          }
       } else if(confirmAttempt) {
          // "If the first candle that closes back within the agreeing internal border ... failed to confirm ... then the triggered state resets."
@@ -1428,7 +1435,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
       // Check if we can repaint the most recent active anchor within Backstep range
       if(state.highAnchors[1].isActive) {
          int dist = idx - state.highAnchors[1].barIndex;
-         if(dist < backstep) {
+         if(dist <= backstep) {
             // Repaint: remove old visual and relocate to current extreme
             bufH[state.highAnchors[1].barIndex] = 0;
             state.highAnchors[1].barIndex = idx;
@@ -1456,7 +1463,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                      state.bosMssState = BOS_MSS_NONE;
                      res = BufferResistance[idx];
                      up = BufferUp[idx];
-                     inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] > res && pOpen[idx] < up) || (pClose[idx] > res && pClose[idx] < up)));
+                     inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] >= res && pOpen[idx] <= up) || (pClose[idx] >= res && pClose[idx] <= up)));
                      double prevUp = BufferUp[idx-1];
                      bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
                      bool valid = true;
@@ -1523,7 +1530,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                   state.bosMssState = BOS_MSS_NONE;
                   res = BufferResistance[idx];
                   up = BufferUp[idx];
-                  inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] > res && pOpen[idx] < up) || (pClose[idx] > res && pClose[idx] < up)));
+                  inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] >= res && pOpen[idx] <= up) || (pClose[idx] >= res && pClose[idx] <= up)));
                   double prevUp = BufferUp[idx-1];
                   bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
                   bool valid = true;
@@ -1569,7 +1576,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
       // Check if we can repaint the most recent active anchor within Backstep range
       if(state.lowAnchors[1].isActive) {
          int dist = idx - state.lowAnchors[1].barIndex;
-         if(dist < backstep) {
+         if(dist <= backstep) {
             // Repaint: remove old visual and relocate to current extreme
             bufL[state.lowAnchors[1].barIndex] = 0;
             state.lowAnchors[1].barIndex = idx;
