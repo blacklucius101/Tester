@@ -200,7 +200,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
 void ProcessPhase5(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, bool touchedOuter);
 void HandleBOSMSS(int idx, const double &open[], const double &high[], const double &low[], const double &close[], const datetime &time[], LevelState &state, bool touchedOuter);
 void HandlePushEvents(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
-void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter);
+bool ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter);
 void HandleBullishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
 void HandleBearishInteractions(int idx, const double &open[], const double &high[], const double &low[], const double &close[], LevelState &state, double up, double down, double mid, double res, double sup, bool touchedOuter);
 void ResetBorderState(BorderState &bs);
@@ -596,6 +596,22 @@ bool IsClosedThrough(double pOpen, double pClose, double border) {
    return false;
 }
 
+int CountInternalBorderCrossings(double pOpen, double pClose, double res, double mid, double sup, const LevelState &state) {
+   int crossed = 0;
+   double r = res;
+   double m = mid;
+   double s = sup;
+   
+   if(state.resState.isStale && r == state.resState.staleLevel) r = EMPTY_VALUE;
+   if(state.midState.isStale && m == state.midState.staleLevel) m = EMPTY_VALUE;
+   if(state.supState.isStale && s == state.supState.staleLevel) s = EMPTY_VALUE;
+   
+   if(IsClosedThrough(pOpen, pClose, r)) crossed++;
+   if(IsClosedThrough(pOpen, pClose, m)) crossed++;
+   if(IsClosedThrough(pOpen, pClose, s)) crossed++;
+   return crossed;
+}
+
 bool IsMidlineTouch(double pOpen, double pHigh, double pLow, double pClose, double mid) {
    if(mid == EMPTY_VALUE) return false;
    // Wick contacts midline, body remains entirely on one side
@@ -658,10 +674,7 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
          bool isBullishCandle = (close[idx] > open[idx]);
          bool isBearishCandle = (close[idx] < open[idx]);
          
-         int crossed = 0;
-         if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
+         int crossed = CountInternalBorderCrossings(open[idx], close[idx], res, mid, sup, state);
          bool midTouch = IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], mid);
 
          if(isBullishCandle) { // Cross push
@@ -721,10 +734,7 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
          bool isBearishCandle = (close[idx] < open[idx]);
          bool isBullishCandle = (close[idx] > open[idx]);
 
-         int crossed = 0;
-         if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
+         int crossed = CountInternalBorderCrossings(open[idx], close[idx], res, mid, sup, state);
          bool midTouch = IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], mid);
 
          if(isBearishCandle) { // Cross push
@@ -807,10 +817,7 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
             }
             // Max internal border crossing rule: counter-cross push candle must not close through > 2 internal borders.
             // Other counter-crosses (for cross push) must not close through > 1 internal border.
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
+            int crossed = CountInternalBorderCrossings(open[idx], close[idx], res, mid, sup, state);
             
             if(state.bullPushState.isCrossPush) {
                if(crossed > 1) valid = false;
@@ -825,6 +832,9 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
             if(valid) {
                BufferBearishEvents[idx] = high[idx];
                state.bullPushState.active = false;
+               if(!state.bullishLock && (state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS)) {
+                  state.bosMssState = BOS_MSS_NONE;
+               }
             }
          }
       }
@@ -856,10 +866,7 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
                   }
                }
             }
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
+            int crossed = CountInternalBorderCrossings(open[idx], close[idx], res, mid, sup, state);
 
             if(state.bearPushState.isCrossPush) {
                if(crossed > 1) valid = false;
@@ -874,6 +881,9 @@ void HandlePushEvents(int idx, const double &open[], const double &high[], const
             if(valid) {
                BufferBullishEvents[idx] = low[idx];
                state.bearPushState.active = false;
+               if(!state.bearishLock && (state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS)) {
+                  state.bosMssState = BOS_MSS_NONE;
+               }
             }
          }
       }
@@ -888,7 +898,11 @@ void HandleBullishInteractions(int idx, const double &open[], const double &high
    bool resMidAgree = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
    
    // Support is always disagreeing internal border for active bullish lock
-   ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true, touchedOuter);
+   if(ProcessInteraction(idx, open, high, low, close, state.supState, sup, true, false, state, true, touchedOuter)) {
+      if(state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS) {
+         state.bosMssState = BOS_MSS_NONE;
+      }
+   }
    
    if(resMidAgree) {
       // Normal bullish lock logic
@@ -911,7 +925,11 @@ void HandleBearishInteractions(int idx, const double &open[], const double &high
    bool supMidAgree = (state.bosMssState == BOS_MSS_NONE || state.bosMssState == BOS_MSS_TRIGGERED_BOS || state.bosMssState == BOS_MSS_TRIGGERED_MSS);
    
    // Resistance is always disagreeing internal border for active bearish lock
-   ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false, touchedOuter);
+   if(ProcessInteraction(idx, open, high, low, close, state.resState, res, false, false, state, false, touchedOuter)) {
+      if(state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS) {
+         state.bosMssState = BOS_MSS_NONE;
+      }
+   }
    
    if(supMidAgree) {
       // Normal bearish lock logic
@@ -970,6 +988,7 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
       
       if(state.bullishLock) {
          // Agreeing internal border is Resistance. Confirm on close back within (close < resistance).
+         if(state.resState.isStale && res == state.resState.staleLevel) res = EMPTY_VALUE;
          if(res != EMPTY_VALUE && close[idx] < res) {
             confirmAttempt = true;
             
@@ -979,10 +998,7 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
             bool valid = true;
             if(touchedOuter && !isPush) valid = false; // Candidate must not contact outer border if not a push
             
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
+            int crossed = CountInternalBorderCrossings(open[idx], close[idx], res, mid, sup, state);
             
             // Confirmation candle is affected by push rules and border rules only.
             // If the trigger semafor was a push candle, use push rules.
@@ -1015,6 +1031,7 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
          }
       } else {
          // Bearish Lock: Agreeing internal border is Support. Confirm on close back within (close > support).
+         if(state.supState.isStale && sup == state.supState.staleLevel) sup = EMPTY_VALUE;
          if(sup != EMPTY_VALUE && close[idx] > sup) {
             confirmAttempt = true;
             
@@ -1022,10 +1039,7 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
             bool valid = true;
             if(touchedOuter && !isPush) valid = false;
             
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
+            int crossed = CountInternalBorderCrossings(open[idx], close[idx], res, mid, sup, state);
             
             if(state.bosMssIsPush) {
                if(state.bosMssIsCrossPush) {
@@ -1097,54 +1111,17 @@ void HandleBOSMSS(int idx, const double &open[], const double &high[], const dou
    }
    
    // 2. Handle Resets for Confirmed state
-   if(state.bosMssState == BOS_MSS_CONFIRMED_BOS || state.bosMssState == BOS_MSS_CONFIRMED_MSS) {
-      if(state.bullishLock) {
-         // Reset when close beyond disagreeing border (support) and back within.
-         // Must be a valid counter-cross.
-         if(sup != EMPTY_VALUE && close[idx] > sup && close[idx-1] < sup) {
-            // Validate Phase 5 rules for this reset counter-cross
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-            
-            double prevDown = BufferDown[idx-1];
-            bool isPush = (prevDown != EMPTY_VALUE && down < prevDown);
-            bool valid = (crossed <= 1);
-            if(touchedOuter && !isPush) valid = false;
-
-            if(valid) {
-               state.bosMssState = BOS_MSS_NONE;
-            }
-         }
-      } else {
-         // Bearish lock: disagreeing border is Resistance.
-         if(res != EMPTY_VALUE && close[idx] < res && close[idx-1] > res) {
-            int crossed = 0;
-            if(IsClosedThrough(open[idx], close[idx], res)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], mid)) crossed++;
-            if(IsClosedThrough(open[idx], close[idx], sup)) crossed++;
-            
-            double prevUp = BufferUp[idx-1];
-            bool isPush = (prevUp != EMPTY_VALUE && up > prevUp);
-            bool valid = (crossed <= 1);
-            if(touchedOuter && !isPush) valid = false;
-
-            if(valid) {
-               state.bosMssState = BOS_MSS_NONE;
-            }
-         }
-      }
-   }
+   // Resets for confirmed state are now handled by highlight events in HandlePushEvents 
+   // and ProcessInteraction (via HandleBullishInteractions/HandleBearishInteractions).
 }
 
 //+------------------------------------------------------------------+
 //| Generic Interaction Processor                                    |
 //+------------------------------------------------------------------+
-void ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter) {
+bool ProcessInteraction(int idx, const double &open[], const double &high[], const double &low[], const double &close[], BorderState &bs, double border, bool isBullishLock, bool isAgreeing, LevelState &state, bool toBullBuffer, bool touchedOuter) {
    if(border == EMPTY_VALUE) {
       bs.activeType = INT_NONE;
-      return;
+      return false;
    }
 
    if(touchedOuter) {
@@ -1156,7 +1133,7 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
       if(border != bs.staleLevel) {
          bs.isStale = false;
       } else {
-         return; // Level still stale
+         return false; // Level still stale
       }
    }
 
@@ -1195,10 +1172,7 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
          bool valid = true;
          
          // Border crossing rules
-         int crossed = 0;
-         if(IsClosedThrough(open[idx], close[idx], r)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], m)) crossed++;
-         if(IsClosedThrough(open[idx], close[idx], s)) crossed++;
+         int crossed = CountInternalBorderCrossings(open[idx], close[idx], r, m, s, state);
          if(crossed > 1) valid = false; // counter-cross candle must not close through > 1 internal border.
          
          // Counter-cross is immune to midline touch rule
@@ -1260,20 +1234,21 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
          if(valid) {
             if(toBullBuffer) BufferBullishEvents[idx] = low[idx];
             else BufferBearishEvents[idx] = high[idx];
+            bs.activeType = INT_NONE;
+            return true;
          }
          bs.activeType = INT_NONE;
+         return false;
       } else if(disrupted || failedCounterCross) {
          bs.activeType = INT_NONE;
+         return false;
       }
    }
 
    // 2. Check for new Cross/Swipe
-   if(touchedOuter) return; // Cannot be a cross/swipe if touched outer (even if push, push handled separately)
+   if(touchedOuter) return false; // Cannot be a cross/swipe if touched outer (even if push, push handled separately)
 
-   int crossed = 0;
-   if(IsClosedThrough(open[idx], close[idx], r)) crossed++;
-   if(IsClosedThrough(open[idx], close[idx], m)) crossed++;
-   if(IsClosedThrough(open[idx], close[idx], s)) crossed++;
+   int crossed = CountInternalBorderCrossings(open[idx], close[idx], r, m, s, state);
    bool midTouch = IsMidlineTouch(open[idx], high[idx], low[idx], close[idx], m);
    bool midConstraint = (crossed > 0 && midTouch);
 
@@ -1302,7 +1277,10 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
       }
       // Special midline counter-cross push
       else if(border == m && isBullishCandle && open[idx] > border && close[idx] > border && low[idx] <= border && low[idx-1] > border) {
-          if(crossed == 0) BufferBullishEvents[idx] = low[idx];
+          if(crossed == 0) {
+             BufferBullishEvents[idx] = low[idx];
+             return true;
+          }
       }
    } else {
       // (Bearish) Cross: bullish candle closes above border
@@ -1329,9 +1307,13 @@ void ProcessInteraction(int idx, const double &open[], const double &high[], con
       }
       // Special midline counter-cross push
       else if(border == m && isBearishCandle && open[idx] < border && close[idx] < border && high[idx] >= border && high[idx-1] < border) {
-          if(crossed == 0) BufferBearishEvents[idx] = high[idx];
+          if(crossed == 0) {
+             BufferBearishEvents[idx] = high[idx];
+             return true;
+          }
       }
    }
+   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -1462,6 +1444,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                   if(canTrigger) {
                      state.bosMssState = BOS_MSS_NONE;
                      res = BufferResistance[idx];
+                     if(state.resState.isStale && res == state.resState.staleLevel) res = EMPTY_VALUE;
                      up = BufferUp[idx];
                      inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] >= res && pOpen[idx] <= up) || (pClose[idx] >= res && pClose[idx] <= up)));
                      double prevUp = BufferUp[idx-1];
@@ -1529,6 +1512,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                if(canTrigger) {
                   state.bosMssState = BOS_MSS_NONE;
                   res = BufferResistance[idx];
+                  if(state.resState.isStale && res == state.resState.staleLevel) res = EMPTY_VALUE;
                   up = BufferUp[idx];
                   inZone = (res != EMPTY_VALUE && up != EMPTY_VALUE && ((pOpen[idx] >= res && pOpen[idx] <= up) || (pClose[idx] >= res && pClose[idx] <= up)));
                   double prevUp = BufferUp[idx-1];
@@ -1603,6 +1587,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                   if(canTrigger) {
                      state.bosMssState = BOS_MSS_NONE;
                      sup = BufferSupport[idx];
+                     if(state.supState.isStale && sup == state.supState.staleLevel) sup = EMPTY_VALUE;
                      dn = BufferDown[idx];
                      inZone = (sup != EMPTY_VALUE && dn != EMPTY_VALUE && ((pOpen[idx] < sup && pOpen[idx] > dn) || (pClose[idx] < sup && pClose[idx] > dn)));
                      double prevDown = BufferDown[idx-1];
@@ -1670,6 +1655,7 @@ void ProcessLevel(int idx, int period, int backstep, int firstBar, const double 
                if(canTrigger) {
                   state.bosMssState = BOS_MSS_NONE;
                   sup = BufferSupport[idx];
+                  if(state.supState.isStale && sup == state.supState.staleLevel) sup = EMPTY_VALUE;
                   dn = BufferDown[idx];
                   inZone = (sup != EMPTY_VALUE && dn != EMPTY_VALUE && ((pOpen[idx] < sup && pOpen[idx] > dn) || (pClose[idx] < sup && pClose[idx] > dn)));
                   double prevDown = BufferDown[idx-1];
