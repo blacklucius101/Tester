@@ -457,7 +457,7 @@ From Phase 3, note that LH → HH/HL → LL will reset (*active lock type) total
 
 2. CONFIRMED
 This BOS/MSS state is disrupted and reset to NOT_TRIGGERED when:
-- price closes back within the (*active lock type) disagreeing border after closing beyond the (*active lock type) disagreeing border. This must be a valid counter-cross candle (check Phase 5 for details).
+- price closes back within the (*active lock type) disagreeing border after closing beyond the (*active lock type) disagreeing border. This must be a valid cross/swipe + counter-cross pair or push + counter-cross pair (check Phase 5 for details). The disruption candle must be a valid highlighted candle at the (*active lock type) disagreeing border.
 - the opposite lock is triggered (ie. (*active lock type) BOS/MSS do not persist between lock transitions: bullish → bearish, bearish → bullish). CONFIRMED (*active lock type) MSS causes an expansion of 12000 points to trigger the opposite lock state (ie. it halves the expansion threshold value).
 
 ---
@@ -475,7 +475,7 @@ Given the sequence HH1 → HH2 → LH1 → LH2/HH3, where HH2 triggers a bullish
             - midline only highlights counter-cross candles associated with the bearish lock (ie. (bearish) counter-cross, special (bearish) counter-cross push at midline)
             - support zone only highlights counter-cross candles associated with the active bullish lock (ie. support counter-cross from bearish push, (bullish) counter-cross. Valid counter-cross candle at the support zone resets (bullish) BOS/MSS state to NOT_TRIGGERED.
         - CONFIRMED (bullish) MSS halves bearish expansion threshold. If at the time of confirmation (bearish) total_expansion <= -12000 points, then instead of a solid vertical magenta line, we trigger bearish lock and plot the associated red dotted vertical line. Otherwise we have to wait for price to form a LL expansion that triggers the halved threshold, (bearish) total_expansion + current_temp <= -12000 points. Bearish lock immediately resets (bullish) BOS/MSS state to NOT_TRIGGERED, and (bullish) total_contraction to 0.
-        - CONFIRMED (bullish) MSS is not affected by the formation of LH2/HH3, provided price didn't close within the support zone.
+        - CONFIRMED (bullish) MSS is not affected by the formation of LH2/HH3, provided price didn't close within the support zone. (bullish) BOS/MSS state immediately resets to NOT_TRIGGERED at the first valid (bullish) counter-cross at the support, provided bearish lock is not triggered first.
 
 Mirror logic for bearish lock state.
 
@@ -494,6 +494,11 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
             - midline only highlights counter-cross candles associated with the bullish lock (ie. (bullish) counter-cross, special (bullish) counter-cross push at midline)
             - resistance zone only highlights counter-cross candles associated with the active bearish lock (ie. resistance counter-cross from bullish push, (bearish) counter-cross). Valid counter-cross candle at the resistance zone resets (bearish) BOS/MSS state to NOT_TRIGGERED.
         - CONFIRMED (bearish) MSS halves bullish expansion threshold. If at the time of confirmation (bullish) total_expansion >= 12000 points, then instead of a solid vertical magenta line, we trigger bullish lock and plot the associated lime dotted vertical line. Otherwise we have to wait for price to form a HH expansion that triggers the halved threshold, (bullish) total_expansion + current_temp >= 12000 points. Bullish lock immediately resets (bearish) BOS/MSS state to NOT_TRIGGERED, and (bearish) total_contraction to 0.
-        - CONFIRMED (bearish) MSS is not affected by the formation of HL2/LL3, provided price didn't close within the resistance zone.
+        - CONFIRMED (bearish) MSS is not affected by the formation of HL2/LL3, provided price didn't close within the resistance zone. (bearish) BOS/MSS state immediately resets to NOT_TRIGGERED at the first valid (bearish) counter-cross at the resistance, provided bullish lock is not triggered first.
 
 ---
+
+# Phase 7: Review and Testing
+
+## Preliminary Error Report
+Check for a possible bug: BOS/MSS confirmation (if the BOS/MSS is triggered by push) and confirmed BOS/MSS reset should occur alongside normal `push event counter-cross` or `cross/swipe counter-cross`. Having a separate HandleBOSMSS function is redundant for these instances, and, in its current implementation, fails to capture these specific requirements. Harmonize the code to get rid of this bug.
