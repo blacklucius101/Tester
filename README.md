@@ -500,29 +500,5 @@ Given the sequence LL1 → LL2 → HL1 → HL2/LL3, where LL2 triggers a bearish
 
 # Phase 7: Review and Testing
 
-## Preferred Final Flow
-1. Donchian update
-
-2. Semafor update
-
-3. Structure update
-
-4. Expansion/Contraction update
-
-5. Lock update & context rebuild
-
-6. Border validity assessment: crossings and overlap
-
-7. BOS/MSS trigger assessment
-
-8. Outer border events
-
-9. Internal border events
-
-10. BOS/MSS confirmation & context rebuild
-
-11. Counter-cross highlighting
-
-12. Object rendering / state commit
-
-Make sure the final code compiles cleanly in the MetaTrader 5 platform without triggering any errors or warnings.
+## Preliminary Error Report
+Possible bug: CONFIRMED BOS/MSS should only be reset by a highlighted counter-cross.
